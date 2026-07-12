@@ -2,6 +2,7 @@ name = "GraftImpurity"
 uuid = "05920a16-b046-4d42-a2c4-f5ac0fa0c24c"
 version = "0.1.0"
 authors = ["weiyiguo9"]
+license = "Apache-2.0"
 
 [deps]
 Clarabel = "61c947e1-3e6d-4ee4-985a-eec8c727bd6e"

@@ -85,3 +85,7 @@ For a one-shot setup from a fresh checkout:
 ```sh
 julia --project -e 'using Pkg; Pkg.develop(path="../GRAFT.jl"); Pkg.develop(path="../GreenFunc.jl"); Pkg.test()'
 ```
+
+## License
+
+GraftImpurity.jl is licensed under the [Apache License 2.0](LICENSE).
