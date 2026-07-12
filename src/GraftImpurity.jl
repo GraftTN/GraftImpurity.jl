@@ -9,7 +9,8 @@ Never referenced by any lower layer (§9.10). Owns *no* private geometry code
 """
 module GraftImpurity
 
-using LinearAlgebra: Diagonal, Hermitian, diag, eigen, norm, opnorm
+using LinearAlgebra: Diagonal, Hermitian, diag, eigen, eigvals, norm, opnorm,
+    svd, tr
 using Graft.Trees: TreeTopology, mount_chain, nodeindex
 using Graft.Symbolic: boson_modes, BosonCoupling
 
@@ -17,7 +18,10 @@ export Partition, audit_partition, BathParametrization, RealPoles,
     MatrixRealPoles, ThermofieldRealPoles, ComplexPoles, couplings,
     factorize_residues, matsubara_reconstruct, mount_bath, fit_bath,
     BosonBath, solve,
-    IRCoefficients, fit_ir, evaluate_ir, to_imtime_ir, to_imfreq_ir
+    IRCoefficients, fit_ir, evaluate_ir, to_imtime_ir, to_imfreq_ir,
+    PESPoleFit, pes_fit, evaluate_poles, bath_orbitals,
+    LorentzianPSD, MatrixLorentzianPSD, lorentzian_fit, spectral_density,
+    complex_poles
 
 # ---------------------------------------------------------------------------
 # §6.2 Partition: a *user declaration* on the impurity orbitals; H_bath never
@@ -1387,6 +1391,9 @@ function _block_anchor(block::Vector{Symbol}, i::Int, attach)
     end
 end
 
+include("pes_pole_fitting.jl")
+include("lorentzian_psd.jl")
 include("sparseir_adapter.jl")
+include("precompile.jl")
 
 end # module GraftImpurity
