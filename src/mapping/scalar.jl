@@ -228,6 +228,7 @@ function _scalar_mapping_report(kernel::CayleyTreeKernel{ScalarCayley},
         hybridization_error=hybridization_error,
         tree_sparsity_error=tree_sparsity_error,
         tree_tolerance=kernel.tree_tolerance,
+        rank_tolerance=kernel.rank_tolerance,
         root_coupling_residual=root_coupling_residual,
         tree_connected=length(forest_roots) == 1,
         virtual_hub=virtual_hub,
@@ -250,6 +251,9 @@ dark components become explicit virtual-hub forest roots rather than deleted
 or reported as nonzero Cayley hoppings.
 """
 function map_bath(kernel::CayleyTreeKernel{ScalarCayley}, bath::DiscreteBath)
+    kernel.rank_tolerance === nothing || throw(ArgumentError(
+        "rank_tolerance applies only to the BlockCayley route",
+    ))
     started = time_ns()
     canonical_coupling = _cayley_coupling_matrix(bath)
     _validate_cayley_groups(kernel, bath, canonical_coupling)
@@ -276,6 +280,9 @@ function map_bath(kernel::CayleyTreeKernel{ScalarCayley}, bath::DiscreteBath)
         push!(group_reports, CayleyGroupReport(
             group.name, group.modes, group.flavors,
             fill(1, length(mapping.state.coupled_roots)); scalar=true,
+            full_root_rank=length(mapping.state.coupled_roots),
+            retained_root_rank=length(mapping.state.coupled_roots),
+            zero_hopping_components=mapping.state.zero_hopping_components,
         ))
         zero_hopping_components += mapping.state.zero_hopping_components
         column += local_dimension

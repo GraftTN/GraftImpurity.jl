@@ -222,6 +222,166 @@ struct BlockCayleyBath{C<:DiscreteBath} <: AbstractCayleyBath
     roots::Vector{BlockCayleyRoot}
     bath_hamiltonian::Matrix{ComplexF64}
     coupling_matrix::Matrix{ComplexF64}
+
+    function BlockCayleyBath(canonical::C, topology::TreeTopology,
+                             sites::Vector{Symbol}, site_dimensions::Vector{Int},
+                             onsite::Vector{Matrix{ComplexF64}},
+                             edges::Vector{BlockCayleyEdge},
+                             roots::Vector{BlockCayleyRoot},
+                             bath_hamiltonian::Matrix{ComplexF64},
+                             coupling_matrix::Matrix{ComplexF64},
+                             ::Val{:validated}) where {C<:DiscreteBath}
+        new{C}(canonical, topology, sites, site_dimensions, onsite, edges,
+               roots, bath_hamiltonian, coupling_matrix)
+    end
+end
+
+function _block_cayley_site_ranges(sites::Vector{Symbol}, dimensions::Vector{Int})
+    ranges = Dict{Symbol,UnitRange{Int}}()
+    column = 1
+    for (site, dimension) in zip(sites, dimensions)
+        ranges[site] = column:(column + dimension - 1)
+        column += dimension
+    end
+    return ranges
+end
+
+function BlockCayleyBath(canonical::C, topology::TreeTopology,
+                         sites::AbstractVector{Symbol},
+                         site_dimensions::AbstractVector{<:Integer},
+                         onsite::AbstractVector{<:AbstractMatrix{<:Number}},
+                         edges::AbstractVector{<:BlockCayleyEdge},
+                         roots::AbstractVector{<:BlockCayleyRoot},
+                         bath_hamiltonian::AbstractMatrix{<:Number},
+                         coupling_matrix::AbstractMatrix{<:Number}) where {
+                             C<:DiscreteBath}
+    canonical_sites = Symbol.(sites)
+    dimensions = Int.(site_dimensions)
+    allunique(canonical_sites) || throw(ArgumentError(
+        "BlockCayleyBath site labels must be unique",
+    ))
+    :cayley_hub in canonical_sites && throw(ArgumentError(
+        "BlockCayleyBath virtual hub is topology-only, never a block site",
+    ))
+    all(dimension -> dimension > 0, dimensions) || throw(ArgumentError(
+        "BlockCayleyBath site dimensions must be positive",
+    ))
+    length(canonical_sites) == length(dimensions) == length(onsite) ||
+        throw(DimensionMismatch(
+            "BlockCayleyBath needs one dimension and onsite block per site",
+        ))
+    sum(dimensions) == length(canonical) || throw(DimensionMismatch(
+        "BlockCayleyBath site dimensions must retain every canonical bath mode",
+    ))
+    transformed_hamiltonian = Matrix{ComplexF64}(bath_hamiltonian)
+    transformed_coupling = Matrix{ComplexF64}(coupling_matrix)
+    size(transformed_hamiltonian) == (length(canonical), length(canonical)) ||
+        throw(DimensionMismatch(
+            "BlockCayleyBath Hamiltonian must cover every canonical bath mode",
+        ))
+    size(transformed_coupling) == (length(flavors(bath_layout(canonical))),
+                                   length(canonical)) || throw(DimensionMismatch(
+        "BlockCayleyBath coupling matrix must use global flavor rows",
+    ))
+    all(value -> isfinite(real(value)) && isfinite(imag(value)),
+        transformed_hamiltonian) || throw(ArgumentError(
+        "BlockCayleyBath Hamiltonian entries must be finite",
+    ))
+    all(value -> isfinite(real(value)) && isfinite(imag(value)),
+        transformed_coupling) || throw(ArgumentError(
+        "BlockCayleyBath coupling entries must be finite",
+    ))
+    hermitian_tolerance = 128 * eps(Float64) * max(norm(transformed_hamiltonian), 1.0)
+    norm(transformed_hamiltonian - adjoint(transformed_hamiltonian)) <=
+        hermitian_tolerance || throw(ArgumentError(
+            "BlockCayleyBath Hamiltonian must be Hermitian within roundoff",
+        ))
+    topology_sites = Symbol[site for site in topology.ids if site != :cayley_hub]
+    Set(topology_sites) == Set(canonical_sites) || throw(ArgumentError(
+        "BlockCayleyBath topology physical sites must match block-site labels",
+    ))
+
+    ranges = _block_cayley_site_ranges(canonical_sites, dimensions)
+    canonical_onsite = Matrix{ComplexF64}[Matrix{ComplexF64}(block) for block in onsite]
+    for (site, block) in zip(canonical_sites, canonical_onsite)
+        range = ranges[site]
+        size(block) == (length(range), length(range)) || throw(DimensionMismatch(
+            "BlockCayleyBath onsite block for $site has the wrong dimension",
+        ))
+        norm(block - transformed_hamiltonian[range, range]) <= hermitian_tolerance ||
+            throw(ArgumentError(
+                "BlockCayleyBath onsite block for $site disagrees with its full Hamiltonian",
+            ))
+    end
+
+    canonical_edges = BlockCayleyEdge[edge for edge in edges]
+    physical_topology_edges = Pair{Symbol,Symbol}[
+        topology.ids[topology.parent[child]] => topology.ids[child]
+        for child in eachindex(topology.ids)
+        if topology.parent[child] != 0 &&
+           topology.ids[topology.parent[child]] != :cayley_hub
+    ]
+    Pair{Symbol,Symbol}[edge.parent => edge.child for edge in canonical_edges] ==
+        physical_topology_edges || throw(ArgumentError(
+            "BlockCayleyBath edges must match nonvirtual topology edges in order",
+        ))
+    for edge in canonical_edges
+        haskey(ranges, edge.parent) && haskey(ranges, edge.child) ||
+            throw(ArgumentError("BlockCayleyBath edge references an unknown block site"))
+        parent_range = ranges[edge.parent]
+        child_range = ranges[edge.child]
+        size(edge.hopping) == (length(parent_range), length(child_range)) ||
+            throw(DimensionMismatch("BlockCayleyBath edge has the wrong block shape"))
+        norm(edge.hopping - transformed_hamiltonian[parent_range, child_range]) <=
+            hermitian_tolerance || throw(ArgumentError(
+                "BlockCayleyBath edge disagrees with its full Hamiltonian",
+            ))
+        !iszero(norm(edge.hopping)) || throw(ArgumentError(
+            "BlockCayleyBath physical edges must retain a nonzero hopping block",
+        ))
+    end
+
+    canonical_roots = BlockCayleyRoot[root for root in roots]
+    allunique(root.site for root in canonical_roots) || throw(ArgumentError(
+        "BlockCayleyBath root sites must be unique",
+    ))
+    layout = bath_layout(canonical)
+    for root in canonical_roots
+        haskey(ranges, root.site) || throw(ArgumentError(
+            "BlockCayleyBath root references an unknown block site",
+        ))
+        topology_index = topology.index[root.site]
+        topology.parent[topology_index] == 0 ||
+            topology.ids[topology.parent[topology_index]] == :cayley_hub ||
+            throw(ArgumentError(
+                "BlockCayleyBath roots must be topology roots or virtual-hub children",
+            ))
+        all(flavor -> flavor in flavors(layout), root.flavors) || throw(ArgumentError(
+            "BlockCayleyBath root references an unknown flavor",
+        ))
+        Tuple(flavor for flavor in flavors(layout) if flavor in root.flavors) ==
+            root.flavors || throw(ArgumentError(
+                "BlockCayleyBath root flavors must retain global layout order",
+            ))
+        rows = Int[flavor_index(layout, flavor) for flavor in root.flavors]
+        range = ranges[root.site]
+        size(root.coupling) == (length(rows), length(range)) || throw(DimensionMismatch(
+            "BlockCayleyBath root coupling has the wrong block shape",
+        ))
+        norm(root.coupling - transformed_coupling[rows, range]) <=
+            128 * eps(Float64) * max(norm(transformed_coupling), 1.0) ||
+            throw(ArgumentError(
+                "BlockCayleyBath root coupling disagrees with its full matrix",
+            ))
+        !iszero(norm(root.coupling)) || throw(ArgumentError(
+            "BlockCayleyBath roots must retain a nonzero impurity coupling",
+        ))
+    end
+    return BlockCayleyBath(
+        canonical, topology, canonical_sites, dimensions, canonical_onsite,
+        canonical_edges, canonical_roots, transformed_hamiltonian,
+        transformed_coupling, Val(:validated),
+    )
 end
 
 """Per caller-declared ownership group mapping evidence."""
@@ -231,19 +391,45 @@ struct CayleyGroupReport
     flavors::Tuple{Vararg{Symbol}}
     root_dimensions::Vector{Int}
     scalar::Bool
+    full_root_rank::Int
+    retained_root_rank::Int
+    root_coupling_residual::Float64
+    rank_reduction_residual::Float64
+    root_rank_thresholds::Vector{Float64}
+    root_singular_values::Vector{Vector{Float64}}
+    rank_reduced::Bool
+    zero_hopping_components::Int
 
     function CayleyGroupReport(name::Symbol, modes::Tuple{Vararg{Int}},
                                flavors::Tuple{Vararg{Symbol}},
                                root_dimensions::Vector{Int}, scalar::Bool,
+                               full_root_rank::Int, retained_root_rank::Int,
+                               root_coupling_residual::Float64,
+                               rank_reduction_residual::Float64,
+                               root_rank_thresholds::Vector{Float64},
+                               root_singular_values::Vector{Vector{Float64}},
+                               rank_reduced::Bool,
+                               zero_hopping_components::Int,
                                ::Val{:validated})
-        new(name, modes, flavors, root_dimensions, scalar)
+        new(name, modes, flavors, root_dimensions, scalar, full_root_rank,
+            retained_root_rank, root_coupling_residual, rank_reduction_residual,
+            root_rank_thresholds, root_singular_values, rank_reduced,
+            zero_hopping_components)
     end
 end
 
 function CayleyGroupReport(name::Symbol, modes::Tuple{Vararg{Int}},
                            flavors::Tuple{Vararg{Symbol}},
                            root_dimensions::AbstractVector{<:Integer};
-                           scalar::Bool)
+                           scalar::Bool,
+                           full_root_rank::Integer=sum(root_dimensions),
+                           retained_root_rank::Integer=sum(root_dimensions),
+                           root_coupling_residual::Real=0.0,
+                           rank_reduction_residual::Real=0.0,
+                           root_rank_thresholds=Float64[],
+                           root_singular_values=Vector{Vector{Float64}}(),
+                           rank_reduced::Bool=false,
+                           zero_hopping_components::Integer=0)
     dimensions = Int.(root_dimensions)
     all(dimension -> dimension > 0, dimensions) || throw(ArgumentError(
         "Cayley group root dimensions must be positive",
@@ -251,7 +437,46 @@ function CayleyGroupReport(name::Symbol, modes::Tuple{Vararg{Int}},
     scalar && all(==(1), dimensions) || !scalar || throw(ArgumentError(
         "scalar Cayley groups require one-dimensional roots",
     ))
+    resolved_full_rank = Int(full_root_rank)
+    resolved_retained_rank = Int(retained_root_rank)
+    resolved_full_rank >= resolved_retained_rank >= sum(dimensions) ||
+        throw(ArgumentError(
+            "Cayley group ranks must satisfy full >= retained >= root dimensions",
+        ))
+    resolved_residual = Float64(root_coupling_residual)
+    isfinite(resolved_residual) && resolved_residual >= 0 || throw(ArgumentError(
+        "Cayley group root coupling residual must be finite and nonnegative",
+    ))
+    resolved_rank_reduction = Float64(rank_reduction_residual)
+    isfinite(resolved_rank_reduction) && resolved_rank_reduction >= 0 ||
+        throw(ArgumentError(
+            "Cayley group rank reduction residual must be finite and nonnegative",
+        ))
+    thresholds = Float64.(root_rank_thresholds)
+    singular_values = Vector{Float64}[Float64.(values)
+                                      for values in root_singular_values]
+    length(thresholds) == length(singular_values) || throw(ArgumentError(
+        "Cayley group root thresholds and singular-value sets must align",
+    ))
+    all(value -> isfinite(value) && value >= 0, thresholds) || throw(ArgumentError(
+        "Cayley group root thresholds must be finite and nonnegative",
+    ))
+    all(values -> all(value -> isfinite(value) && value >= 0, values),
+        singular_values) || throw(ArgumentError(
+        "Cayley group root singular values must be finite and nonnegative",
+    ))
+    rank_reduced == (resolved_rank_reduction > 0) ||
+        throw(ArgumentError(
+            "Cayley group rank-reduced flag must match its reduction residual",
+        ))
+    zero_hopping_components >= 0 || throw(ArgumentError(
+        "Cayley group zero_hopping_components must be nonnegative",
+    ))
     return CayleyGroupReport(name, modes, flavors, dimensions, scalar,
+                             resolved_full_rank, resolved_retained_rank,
+                             resolved_residual, resolved_rank_reduction,
+                             thresholds, singular_values, rank_reduced,
+                             Int(zero_hopping_components),
                              Val(:validated))
 end
 
@@ -262,7 +487,9 @@ struct BathMappingReport{G<:Tuple}
     hybridization_error::Float64
     tree_sparsity_error::Float64
     tree_tolerance::Float64
+    rank_tolerance::Union{Nothing,Float64}
     root_coupling_residual::Float64
+    rank_reduction_residual::Float64
     tree_connected::Bool
     virtual_hub::Bool
     zero_hopping_components::Int
@@ -277,7 +504,9 @@ function BathMappingReport(; unitarity_error::Real, spectrum_error::Real,
                            hybridization_error::Real,
                            tree_sparsity_error::Real,
                            tree_tolerance::Real,
+                           rank_tolerance=nothing,
                            root_coupling_residual::Real,
+                           rank_reduction_residual::Real=0.0,
                            tree_connected::Bool,
                            virtual_hub::Bool,
                            zero_hopping_components::Integer,
@@ -285,13 +514,19 @@ function BathMappingReport(; unitarity_error::Real, spectrum_error::Real,
                            timing_seconds::Real, approximate::Bool=false,
                            experimental::Bool=true)
     errors = Float64[unitarity_error, spectrum_error, hybridization_error,
-                     tree_sparsity_error, root_coupling_residual, timing_seconds]
+                     tree_sparsity_error, root_coupling_residual,
+                     rank_reduction_residual, timing_seconds]
     all(value -> isfinite(value) && value >= 0, errors) || throw(ArgumentError(
         "BathMappingReport errors and timing must be finite and nonnegative",
     ))
     resolved_tree_tolerance = Float64(tree_tolerance)
     isfinite(resolved_tree_tolerance) && resolved_tree_tolerance > 0 ||
         throw(ArgumentError("BathMappingReport tree_tolerance must be finite and positive"))
+    resolved_rank_tolerance = rank_tolerance === nothing ? nothing :
+                              Float64(rank_tolerance)
+    resolved_rank_tolerance === nothing ||
+        (isfinite(resolved_rank_tolerance) && resolved_rank_tolerance >= 0) ||
+        throw(ArgumentError("BathMappingReport rank_tolerance must be finite and nonnegative"))
     zero_hopping_components >= 0 || throw(ArgumentError(
         "BathMappingReport zero_hopping_components must be nonnegative",
     ))
@@ -301,10 +536,15 @@ function BathMappingReport(; unitarity_error::Real, spectrum_error::Real,
     points = Tuple(ComplexF64.(validation_points))
     all(point -> isfinite(real(point)) && isfinite(imag(point)), points) ||
         throw(ArgumentError("BathMappingReport validation points must be finite"))
+    approximate || iszero(errors[6]) || throw(ArgumentError(
+        "BathMappingReport rank reduction must be marked approximate",
+    ))
     return BathMappingReport(errors[1], errors[2], errors[3], errors[4],
-                             resolved_tree_tolerance, errors[5], tree_connected, virtual_hub,
+                             resolved_tree_tolerance, resolved_rank_tolerance, errors[5],
+                             errors[6],
+                             tree_connected, virtual_hub,
                              Int(zero_hopping_components), canonical_groups,
-                             points, errors[6], approximate, experimental)
+                             points, errors[7], approximate, experimental)
 end
 
 """
