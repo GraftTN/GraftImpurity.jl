@@ -23,11 +23,10 @@ function real_pole_bath_fit end
 """
     realize_bath(input, expansion, partition)
 
-Validate real-pole Hamiltonian realizability and form a canonical DiscreteBath.
-
-TODO(M3) — no methods yet.
+Validate real-pole Hamiltonian realizability and form a canonical DiscreteBath
+or typed non-mountable result.
 """
-# TODO(M3): realization owns PSD/Hermiticity validation and factorization.
+# TODO(M4): enrich the M3 realization evidence with BathFitReport diagnostics.
 function realize_bath end
 
 """
@@ -84,11 +83,10 @@ function audit_partition end
 """
     factorize_residues(expansion; kwargs...)
 
-Factor validated PSD residues into canonical BathOrbitals.
-
-TODO(M3) — no methods yet.
+Factor validated PSD residues into canonical BathOrbitals with explicit
+within-block ownership order.
 """
-# TODO(M3): realization must reject non-mountable input before factorization.
+# TODO(M4): attach factorization details to the concrete BathFitReport.
 function factorize_residues end
 
 """

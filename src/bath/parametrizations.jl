@@ -8,6 +8,8 @@ complex matrices local to their declared block. This is an expansion, not a
 Hamiltonian-realizability proof: M3 validates Hermiticity and PSD without
 silently projecting or deleting off-diagonal data.
 """
+const _BlockPoleResidue = Union{Float64,ComplexF64,Matrix{ComplexF64}}
+
 struct BlockRealPoles{R} <: AbstractBathParametrization
     layout::FlavorLayout
     partition::Partition
@@ -64,6 +66,42 @@ function BlockRealPoles(layout::FlavorLayout, partition::Partition,
         scalar_residues) ||
         throw(ArgumentError("BlockRealPoles scalar residues must be finite"))
     return BlockRealPoles(layout, partition, values, scalar_residues, blocks,
+                          statistics, Val(:validated))
+end
+
+function BlockRealPoles(layout::FlavorLayout, partition::Partition,
+                        poles::AbstractVector{<:Real}, residues::AbstractVector,
+                        block_indices::AbstractVector{<:Integer};
+                        statistics::Symbol)
+    all(residue -> residue isa Union{Number,AbstractMatrix}, residues) ||
+        throw(ArgumentError(
+            "BlockRealPoles residues must be scalar numbers or block-local matrices",
+        ))
+    values, blocks = _validate_pole_header(
+        layout, partition, poles, residues, block_indices, statistics)
+    canonical = _BlockPoleResidue[]
+    for (index, (residue, block)) in enumerate(zip(residues, blocks))
+        dimension = length(block_flavors(partition, block_names(partition)[block]))
+        if residue isa Number
+            dimension == 1 || throw(DimensionMismatch(
+                "BlockRealPoles scalar residue $index requires a one-flavor block",
+            ))
+            value = ComplexF64(residue)
+            isfinite(real(value)) && isfinite(imag(value)) ||
+                throw(ArgumentError("BlockRealPoles residue $index must be finite"))
+            push!(canonical, isreal(value) ? Float64(real(value)) : value)
+        else
+            size(residue) == (dimension, dimension) ||
+                throw(DimensionMismatch(
+                    "BlockRealPoles residue $index must be $dimension by $dimension for block $block",
+                ))
+            matrix = Matrix{ComplexF64}(residue)
+            all(value -> isfinite(real(value)) && isfinite(imag(value)), matrix) ||
+                throw(ArgumentError("BlockRealPoles residue $index must be finite"))
+            push!(canonical, matrix)
+        end
+    end
+    return BlockRealPoles(layout, partition, values, canonical, blocks,
                           statistics, Val(:validated))
 end
 

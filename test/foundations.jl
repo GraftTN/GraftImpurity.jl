@@ -149,13 +149,11 @@ end
     @test_throws ArgumentError T3NS(layout; flavor_order=[:up, :up])
 
     @test length(methods(real_pole_bath_fit)) == 0
-    @test length(methods(realize_bath)) == 0
     @test length(methods(mount_bath)) == 0
     @test length(methods(map_bath)) == 0
     @test length(methods(impurity_topology)) == 0
     @test length(methods(lower_interaction)) == 0
     @test length(methods(audit_partition)) == 0
-    @test length(methods(factorize_residues)) == 0
     @test length(methods(reconstruct_hybridization)) == 0
     @test length(methods(audit_bathfit)) == 0
     @test length(methods(audit_symmetry)) == 0
