@@ -9,7 +9,7 @@ and solver orchestration. Graft remains dependency-free of this package.
 module GraftImpurity
 
 using LinearAlgebra: Diagonal, Hermitian, I, diag, eigen, eigvals, norm, opnorm,
-    svd, tr
+    qr, svd, tr
 using Graft
 import GreenFunc
 import Optim
@@ -31,6 +31,12 @@ export FlavorLayout, flavors, flavor_index, physical_site, site_modes,
     bath_layout, bath_partition, bath_orbitals, bath_statistics,
     FermionSiteOperators, local_annihilator, local_creator, local_number,
     AndersonBath, BosonBath,
+    AbstractCayleyRoute, ScalarCayley, BlockCayley, AbstractCayleyPartitioner,
+    BalancedCayleyPartitioner, EnergySplitCayleyPartitioner,
+    CayleyOwnershipGroup, CayleyTreeKernel, AbstractCayleyBath,
+    ScalarCayleyEdge, ScalarCayleyRoot, BlockCayleyEdge, BlockCayleyRoot,
+    ScalarCayleyBath, BlockCayleyBath, CayleyGroupReport, BathMappingReport,
+    CayleyMappingResult,
     T3NS, FTPS,
     BathFitInput, BCFFitInput, SpectralInterval, BlockDiscretizationPlan,
     DiscretizationPlan, plan_block, PoleBinDiagnostic, BathFitResidual,
@@ -62,6 +68,8 @@ include(joinpath(@__DIR__, "bath", "mounted_baths.jl"))
 include(joinpath(@__DIR__, "topology", "plans.jl"))
 include(joinpath(@__DIR__, "topology", "builders.jl"))
 include(joinpath(@__DIR__, "bath", "mounting.jl"))
+include(joinpath(@__DIR__, "mapping", "types.jl"))
+include(joinpath(@__DIR__, "mapping", "scalar.jl"))
 include(joinpath(@__DIR__, "fitting", "nnls.jl"))
 include(joinpath(@__DIR__, "fitting", "input.jl"))
 include(joinpath(@__DIR__, "fitting", "bcf_input.jl"))

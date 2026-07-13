@@ -7,6 +7,7 @@ const TEST_VERBOSE = lowercase(get(ENV, "GRAFT_TEST_VERBOSE", "false")) in
 @testset "GraftImpurity.jl" begin
     include(joinpath(@__DIR__, "foundations.jl"))
     include(joinpath(@__DIR__, "topology_mounting.jl"))
+    include(joinpath(@__DIR__, "cayley_mapping.jl"))
     include(joinpath(@__DIR__, "realization.jl"))
     include(joinpath(@__DIR__, "bathfit_report.jl"))
     include(joinpath(@__DIR__, "real_pole_kernels.jl"))

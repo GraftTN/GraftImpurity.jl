@@ -149,7 +149,7 @@ end
     @test_throws ArgumentError T3NS(layout; flavor_order=[:up, :up])
 
     @test length(methods(mount_bath)) == 1
-    @test length(methods(map_bath)) == 0
+    @test length(methods(map_bath)) == 1
     @test length(methods(impurity_topology)) == 2
     @test length(methods(lower_interaction)) == 0
     @test length(methods(audit_partition)) == 0
@@ -175,5 +175,12 @@ end
     @test !isdefined(GraftImpurity, :AndersonRealPoles)
     @test isdefined(GraftImpurity, :AndersonBath)
     @test !isdefined(GraftImpurity, :MountedBath)
+    @test ScalarCayley <: AbstractCayleyRoute
+    @test BlockCayley <: AbstractCayleyRoute
+    cayley_group = CayleyOwnershipGroup(:up, [1], [:up])
+    cayley_kernel = CayleyTreeKernel(ScalarCayley(), [cayley_group])
+    @test cayley_kernel.groups == (cayley_group,)
+    @test_throws ArgumentError CayleyOwnershipGroup(:bad, [0], [:up])
+    @test_throws ArgumentError CayleyTreeKernel(ScalarCayley(), CayleyOwnershipGroup[])
     @test !isdefined(GraftImpurity, :solve)
 end

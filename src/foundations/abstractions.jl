@@ -74,9 +74,10 @@ function mount_bath end
 
 Apply an explicit bath-Hamiltonian basis-mapping kernel.
 
-TODO(M5) — no methods yet.
+M5 implements the typed `ScalarCayley` route. The full-matrix `BlockCayley`
+route remains an explicit M5b extension and no mapping infers ownership from
+coupling magnitude.
 """
-# TODO(M5): mapping is an explicit bath-Hamiltonian basis transformation.
 function map_bath end
 
 """
