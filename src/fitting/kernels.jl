@@ -178,3 +178,53 @@ function PESKernel(; tolerance::Union{Nothing,Real}=nothing,
                      Int(min_support), Int(max_support), aaa, residue,
                      conic_diagnostic, Val(:validated))
 end
+
+"""
+    MiniPoleKernel(; n_poles, rank_tolerance=sqrt(eps()),
+                   conformal_scale=nothing, holdout_count=0,
+                   fit_tolerance=nothing)
+
+Clean-room MiniPole/matrix-ESPRIT configuration shared by two typed routes.
+`real_pole_bath_fit` uses `conformal_scale` as a preferred real-Matsubara
+mapping scale and accepts only finite real Hamiltonian energies. `fit_complex_bcf`
+uses the same stacked exponential engine on a uniform time grid and preserves
+stable complex BCF exponents. `fit_tolerance=nothing` records quality without a
+hard fit gate; a positive value enforces a relative training-error limit.
+"""
+struct MiniPoleKernel <: AbstractRealPoleBathFitKernel
+    n_poles::Int
+    rank_tolerance::Float64
+    conformal_scale::Union{Nothing,Float64}
+    holdout_count::Int
+    fit_tolerance::Union{Nothing,Float64}
+
+    function MiniPoleKernel(n_poles::Int, rank_tolerance::Float64,
+                            conformal_scale::Union{Nothing,Float64},
+                            holdout_count::Int,
+                            fit_tolerance::Union{Nothing,Float64},
+                            ::Val{:validated})
+        new(n_poles, rank_tolerance, conformal_scale, holdout_count,
+            fit_tolerance)
+    end
+end
+
+function MiniPoleKernel(; n_poles::Integer,
+                        rank_tolerance::Real=sqrt(eps(Float64)),
+                        conformal_scale::Union{Nothing,Real}=nothing,
+                        holdout_count::Integer=0,
+                        fit_tolerance::Union{Nothing,Real}=nothing)
+    count = Int(n_poles)
+    count > 0 || throw(ArgumentError("MiniPoleKernel n_poles must be positive"))
+    tolerance = Float64(rank_tolerance)
+    isfinite(tolerance) && tolerance > 0 ||
+        throw(ArgumentError("MiniPoleKernel rank_tolerance must be finite and positive"))
+    scale = conformal_scale === nothing ? nothing : Float64(conformal_scale)
+    scale === nothing || (isfinite(scale) && scale > 0) ||
+        throw(ArgumentError("MiniPoleKernel conformal_scale must be finite and positive"))
+    retained = Int(holdout_count)
+    retained >= 0 || throw(ArgumentError("MiniPoleKernel holdout_count must be nonnegative"))
+    fit = fit_tolerance === nothing ? nothing : Float64(fit_tolerance)
+    fit === nothing || (isfinite(fit) && fit > 0) ||
+        throw(ArgumentError("MiniPoleKernel fit_tolerance must be finite and positive"))
+    return MiniPoleKernel(count, tolerance, scale, retained, fit, Val(:validated))
+end

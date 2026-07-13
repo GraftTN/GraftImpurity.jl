@@ -1,7 +1,8 @@
-function _validate_matsubara_fit(input::BathFitInput, partition::Partition)
+function _validate_matsubara_fit(input::BathFitInput, partition::Partition;
+                                 kernel_name::AbstractString="this kernel")
     _validate_fit_input(input, partition)
     input.domain === :matsubara ||
-        throw(ArgumentError("PESKernel requires BathFitInput domain=:matsubara"))
+        throw(ArgumentError("$kernel_name requires BathFitInput domain=:matsubara"))
     return nothing
 end
 
@@ -21,7 +22,7 @@ ordered factorization remain exclusively the responsibility of `realize_bath`.
 """
 function real_pole_bath_fit(input::BathFitInput, kernel::PESKernel,
                             partition::Partition)
-    _validate_matsubara_fit(input, partition)
+    _validate_matsubara_fit(input, partition; kernel_name="PESKernel")
     frequencies = im .* input.frequencies
     poles = Float64[]
     residues = Matrix{ComplexF64}[]

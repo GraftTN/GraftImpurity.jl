@@ -21,18 +21,21 @@ export FlavorLayout, flavors, flavor_index, physical_site, site_modes,
     Partition, block_names, block_flavors, block_index, partition_flavors,
     validate_partition,
     AbstractRealPoleBathFitKernel, AbstractBathParametrization,
+    AbstractBCFParametrization,
     AbstractHamiltonianBath, AbstractBathMappingKernel,
     AbstractImpurityTopologyPlan, AbstractMountedBath,
     AbstractImpurityInteraction, AbstractImpuritySolver,
-    BlockRealPoles, PoleExpansion, BathOrbitals, DiscreteBath,
+    BlockRealPoles, PoleExpansion, BathOrbitals, DiscreteBath, ComplexPoles,
     bath_layout, bath_partition, bath_orbitals, bath_statistics,
     MountedBath,
     T3NS, FTPS,
-    BathFitInput, SpectralInterval, BlockDiscretizationPlan,
+    BathFitInput, BCFFitInput, SpectralInterval, BlockDiscretizationPlan,
     DiscretizationPlan, plan_block, PoleBinDiagnostic,
     DiscretizationResult, NonMountablePoleFit,
-    QuadratureKernel, BoundaryFitKernel, PESKernel,
-    real_pole_bath_fit, realize_bath, mount_bath, map_bath,
+    QuadratureKernel, BoundaryFitKernel, PESKernel, MiniPoleKernel,
+    real_pole_bath_fit, fit_complex_bcf, evaluate_bcf,
+    realize_bath, mount_bath, map_bath, realize_quasi_lindblad,
+    realize_coupled_lindblad,
     impurity_topology, lower_interaction, audit_partition, factorize_residues,
     reconstruct_hybridization, audit_bathfit, audit_symmetry,
     set_weiss!, set_hybridization!, solve!,
@@ -45,17 +48,22 @@ include(joinpath(@__DIR__, "foundations", "layout.jl"))
 include(joinpath(@__DIR__, "foundations", "partition.jl"))
 include(joinpath(@__DIR__, "foundations", "abstractions.jl"))
 include(joinpath(@__DIR__, "bath", "parametrizations.jl"))
+include(joinpath(@__DIR__, "bath", "complex_poles.jl"))
 include(joinpath(@__DIR__, "bath", "discrete_bath.jl"))
 include(joinpath(@__DIR__, "bath", "mounted_baths.jl"))
 include(joinpath(@__DIR__, "topology", "plans.jl"))
 include(joinpath(@__DIR__, "fitting", "nnls.jl"))
 include(joinpath(@__DIR__, "fitting", "input.jl"))
+include(joinpath(@__DIR__, "fitting", "bcf_input.jl"))
 include(joinpath(@__DIR__, "fitting", "plans.jl"))
 include(joinpath(@__DIR__, "bath", "realization.jl"))
 include(joinpath(@__DIR__, "fitting", "kernels.jl"))
 include(joinpath(@__DIR__, "fitting", "quadrature.jl"))
 include(joinpath(@__DIR__, "pes_pole_fitting.jl"))
 include(joinpath(@__DIR__, "fitting", "pes_kernel.jl"))
+include(joinpath(@__DIR__, "fitting", "minipole_engine.jl"))
+include(joinpath(@__DIR__, "fitting", "minipole.jl"))
+include(joinpath(@__DIR__, "fitting", "complex_bcf.jl"))
 include(joinpath(@__DIR__, "fitting", "boundary_fit.jl"))
 include(joinpath(@__DIR__, "lorentzian_psd.jl"))
 include(joinpath(@__DIR__, "sparseir_adapter.jl"))

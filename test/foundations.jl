@@ -156,6 +156,8 @@ end
     @test length(methods(reconstruct_hybridization)) == 0
     @test length(methods(audit_bathfit)) == 0
     @test length(methods(audit_symmetry)) == 0
+    @test length(methods(realize_quasi_lindblad)) == 0
+    @test length(methods(realize_coupled_lindblad)) == 0
     @test length(methods(set_weiss!)) == 0
     @test length(methods(set_hybridization!)) == 0
     @test length(methods(solve!)) == 0
@@ -164,7 +166,8 @@ end
     @test !isdefined(GraftImpurity, :RealPoles)
     @test !isdefined(GraftImpurity, :MatrixRealPoles)
     @test !isdefined(GraftImpurity, :ThermofieldRealPoles)
-    @test !isdefined(GraftImpurity, :ComplexPoles)
+    @test isdefined(GraftImpurity, :ComplexPoles)
+    @test ComplexPoles <: AbstractBCFParametrization
     @test !isdefined(GraftImpurity, :fit_bath)
     @test !isdefined(GraftImpurity, :matsubara_reconstruct)
     @test !isdefined(GraftImpurity, :couplings)

@@ -3,6 +3,7 @@
 
 abstract type AbstractRealPoleBathFitKernel end
 abstract type AbstractBathParametrization end
+abstract type AbstractBCFParametrization <: AbstractBathParametrization end
 abstract type AbstractHamiltonianBath <: AbstractBathParametrization end
 abstract type AbstractBathMappingKernel end
 abstract type AbstractImpurityTopologyPlan end
@@ -15,8 +16,41 @@ abstract type AbstractImpuritySolver end
 
 Fit a real-pole expansion through an executable bath-fit kernel.
 """
-# TODO(M3c): add MiniPoleKernel and CouplingFitKernel methods.
+# TODO(M3c): add the direct CouplingFitKernel method.
 function real_pole_bath_fit end
+
+"""
+    fit_complex_bcf(input, kernel, partition)
+
+Fit a typed time-domain bath-correlation-function exponential sum. Concrete
+methods return BCF data only; they never create a Hamiltonian bath.
+"""
+function fit_complex_bcf end
+
+"""
+    evaluate_bcf(poles, times, block)
+
+Evaluate a typed complex BCF exponential sum for one named partition block.
+"""
+function evaluate_bcf end
+
+"""
+    realize_quasi_lindblad(poles; kwargs...)
+
+TODO(M5+/CG-005) — BCF-preserving quasi-Lindblad realization requires the
+missing core Liouvillian/TTNDO lowering contract.
+"""
+# TODO(M5+/CG-005): implement only after core Liouvillian/TTNDO semantics land.
+function realize_quasi_lindblad end
+
+"""
+    realize_coupled_lindblad(poles; kwargs...)
+
+TODO(M5+/CG-005) — coupled-Lindblad realization requires the missing core
+Liouvillian/TTNDO lowering contract.
+"""
+# TODO(M5+/CG-005): implement only after core Liouvillian/TTNDO semantics land.
+function realize_coupled_lindblad end
 
 """
     realize_bath(input, expansion, partition)

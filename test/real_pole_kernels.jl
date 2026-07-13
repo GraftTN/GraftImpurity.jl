@@ -323,8 +323,165 @@ end
                        reshape(ComplexF64[value], 1, 1))
                   for (frequency, value) in zip(matsubara_frequencies, matsubara_values)) < 2e-2
 
+    minipole_expansion = real_pole_bath_fit(
+        matsubara_input, MiniPoleKernel(n_poles=2), scalar_partition,
+    )
+    @test minipole_expansion.kernel === :minipole
+    @test minipole_expansion.trace.algorithm === :minipole_conformal_matrix_esprit
+    @test minipole_expansion.trace.source_metadata == matsubara_input.metadata
+    @test minipole_expansion.trace.fits[1].selected_poles == 2
+    @test minipole_expansion.trace.fits[1].selected_attempt.training_error.relative_l2 < 1e-8
+    @test sort(minipole_expansion.poles.poles) ≈ [-0.75, 0.5] atol=1e-8
+    @test maximum(norm(_expansion_value(minipole_expansion, 1, im * frequency) .-
+                       reshape(ComplexF64[value], 1, 1))
+                  for (frequency, value) in zip(matsubara_frequencies, matsubara_values)) < 1e-8
+    @test realize_bath(matsubara_input, minipole_expansion, scalar_partition) isa
+          DiscretizationResult
+    heldout_minipole = real_pole_bath_fit(
+        matsubara_input, MiniPoleKernel(n_poles=2, holdout_count=2),
+        scalar_partition,
+    )
+    @test heldout_minipole.trace.fits[1].training_count == 10
+    @test heldout_minipole.trace.fits[1].selected_attempt.holdout_error.relative_l2 < 1e-8
+    tail_corrupted_values = copy(matsubara_values)
+    tail_corrupted_values[end - 1:end] .+= ComplexF64[0.7 - 0.4im, -0.5 + 0.3im]
+    tail_corrupted_input = BathFitInput(
+        scalar_layout, matsubara_frequencies, :charge => tail_corrupted_values;
+        domain=:matsubara, statistics=:fermion,
+    )
+    tail_heldout = real_pole_bath_fit(
+        tail_corrupted_input, MiniPoleKernel(n_poles=2, holdout_count=2),
+        scalar_partition,
+    )
+    @test tail_heldout.trace.fits[1].selected_attempt.training_error.relative_l2 < 1e-8
+    @test tail_heldout.trace.fits[1].selected_attempt.holdout_error.relative_l2 > 0.1
+    singular_map_values = ComplexF64[1 / (im * frequency + 1)
+                                      for frequency in matsubara_frequencies]
+    singular_map_input = BathFitInput(
+        scalar_layout, matsubara_frequencies, :charge => singular_map_values;
+        domain=:matsubara, statistics=:fermion,
+    )
+    singular_map_expansion = real_pole_bath_fit(
+        singular_map_input,
+        MiniPoleKernel(n_poles=1, conformal_scale=1.0), scalar_partition,
+    )
+    @test only(singular_map_expansion.poles.poles) ≈ -1.0 atol=1e-8
+    nonuniform_matsubara = [0.5, 1.0, 1.75, 2.5]
+    nonuniform_input = BathFitInput(
+        scalar_layout, nonuniform_matsubara,
+        :charge => ComplexF64[1 / (im * frequency + 1)
+                              for frequency in nonuniform_matsubara];
+        domain=:matsubara, statistics=:fermion,
+    )
+    @test_throws ArgumentError real_pole_bath_fit(
+        nonuniform_input, MiniPoleKernel(n_poles=1), scalar_partition,
+    )
+    overcomplete_minipole = real_pole_bath_fit(
+        matsubara_input, MiniPoleKernel(n_poles=3), scalar_partition,
+    )
+    @test length(overcomplete_minipole.poles) == 2
+    @test overcomplete_minipole.trace.fits[1].selected_poles == 2
+    complex_pole_input = BathFitInput(
+        scalar_layout, matsubara_frequencies,
+        :charge => ComplexF64[1 / (im * frequency - (0.5 - 0.25im))
+                              for frequency in matsubara_frequencies];
+        domain=:matsubara, statistics=:fermion,
+    )
+    @test_throws ArgumentError real_pole_bath_fit(
+        complex_pole_input, MiniPoleKernel(n_poles=1), scalar_partition,
+    )
+    nearly_real_complex_input = BathFitInput(
+        scalar_layout, matsubara_frequencies,
+        :charge => ComplexF64[1 / (im * frequency - (0.5 - 0.01im))
+                              for frequency in matsubara_frequencies];
+        domain=:matsubara, statistics=:fermion,
+    )
+    @test_throws ArgumentError real_pole_bath_fit(
+        nearly_real_complex_input,
+        MiniPoleKernel(n_poles=1, rank_tolerance=0.1), scalar_partition,
+    )
+
+    zero_scalar_input = BathFitInput(
+        scalar_layout, matsubara_frequencies,
+        :charge => zeros(ComplexF64, length(matsubara_frequencies));
+        domain=:matsubara, statistics=:fermion,
+    )
+    zero_scalar_expansion = real_pole_bath_fit(
+        zero_scalar_input, MiniPoleKernel(n_poles=1), scalar_partition,
+    )
+    @test length(zero_scalar_expansion.poles) == 0
+    @test zero_scalar_expansion.trace.fits[1].selected_attempt.status === :zero_sequence
+    @test realize_bath(zero_scalar_input, zero_scalar_expansion, scalar_partition) isa
+          DiscretizationResult
+
+    minipole_vectors = (ComplexF64[0.8, 0.3im], ComplexF64[0.2 - 0.4im, 0.6])
+    minipole_energies = (-0.75, 0.5)
+    minipole_matrix_values = Matrix{ComplexF64}[
+        sum(vector * vector' ./ (im * frequency - energy)
+            for (energy, vector) in zip(minipole_energies, minipole_vectors))
+        for frequency in matsubara_frequencies
+    ]
+    minipole_matrix_input = BathFitInput(
+        matrix_layout, matsubara_frequencies, :spin => minipole_matrix_values;
+        domain=:matsubara, statistics=:fermion,
+    )
+    minipole_matrix_expansion = real_pole_bath_fit(
+        minipole_matrix_input, MiniPoleKernel(n_poles=2), matrix_partition,
+    )
+    @test any(residue -> abs(residue[1, 2]) > 0,
+              minipole_matrix_expansion.poles.residues)
+    @test maximum(norm(_expansion_value(minipole_matrix_expansion, 1, im * frequency) .-
+                       value)
+                  for (frequency, value) in
+                  zip(matsubara_frequencies, minipole_matrix_values)) < 1e-8
+    @test realize_bath(
+        minipole_matrix_input, minipole_matrix_expansion, matrix_partition;
+        orbital_order=(; spin=[:up, :down]),
+    ) isa DiscretizationResult
+    zero_matrix_input = BathFitInput(
+        matrix_layout, matsubara_frequencies,
+        :spin => fill(zeros(ComplexF64, 2, 2), length(matsubara_frequencies));
+        domain=:matsubara, statistics=:fermion,
+    )
+    zero_matrix_expansion = real_pole_bath_fit(
+        zero_matrix_input, MiniPoleKernel(n_poles=1), matrix_partition,
+    )
+    @test length(zero_matrix_expansion.poles) == 0
+    @test zero_matrix_expansion.trace.fits[1].selected_attempt.status === :zero_sequence
+    indefinite_matsubara_values = Matrix{ComplexF64}[
+        ComplexF64[1 2; 2 1] ./ (im * frequency + 0.4)
+        for frequency in matsubara_frequencies
+    ]
+    indefinite_matsubara_input = BathFitInput(
+        matrix_layout, matsubara_frequencies, :spin => indefinite_matsubara_values;
+        domain=:matsubara, statistics=:fermion,
+    )
+    indefinite_minipole = real_pole_bath_fit(
+        indefinite_matsubara_input, MiniPoleKernel(n_poles=1), matrix_partition,
+    )
+    @test indefinite_minipole.poles.residues[1][1, 2] != 0
+    @test realize_bath(
+        indefinite_matsubara_input, indefinite_minipole, matrix_partition;
+        orbital_order=(; spin=[:up, :down]),
+    ) isa NonMountablePoleFit
+
     mixed_layout = _kernel_layout([:charge, :up, :down]; basis=:mixed_kernel)
     mixed_partition = Partition(:charge => [:charge], :spin => [:up, :down])
+    mixed_matsubara_input = BathFitInput(
+        mixed_layout, matsubara_frequencies,
+        :charge => zeros(ComplexF64, length(matsubara_frequencies)),
+        :spin => minipole_matrix_values;
+        domain=:matsubara, statistics=:fermion,
+    )
+    mixed_matsubara_expansion = real_pole_bath_fit(
+        mixed_matsubara_input, MiniPoleKernel(n_poles=2), mixed_partition,
+    )
+    @test all(==(2), mixed_matsubara_expansion.poles.block_indices)
+    @test mixed_matsubara_expansion.trace.fits[1].selected_poles == 0
+    @test realize_bath(
+        mixed_matsubara_input, mixed_matsubara_expansion, mixed_partition;
+        orbital_order=(; charge=[:charge], spin=[:up, :down]),
+    ) isa DiscretizationResult
     mixed_input = BathFitInput(
         mixed_layout, frequencies,
         :charge => scalar_spectrum,
