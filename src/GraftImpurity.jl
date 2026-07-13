@@ -13,7 +13,8 @@ using LinearAlgebra: Diagonal, Hermitian, I, diag, eigen, eigvals, norm, opnorm,
 using Graft
 import GreenFunc
 import Optim
-using Graft.Backend: ElementarySpace
+using Graft.Backend: ElementarySpace, AbstractTensorMap, FermionParity, Vect,
+    TensorMap, ⊗, ←
 using Graft.Symbolic: OpSum
 using Graft.Trees: TreeTopology
 
@@ -28,7 +29,8 @@ export FlavorLayout, flavors, flavor_index, physical_site, site_modes,
     AbstractImpurityInteraction, AbstractImpuritySolver,
     BlockRealPoles, PoleExpansion, BathOrbitals, DiscreteBath, ComplexPoles,
     bath_layout, bath_partition, bath_orbitals, bath_statistics,
-    MountedBath,
+    FermionSiteOperators, local_annihilator, local_creator, local_number,
+    AndersonBath, BosonBath,
     T3NS, FTPS,
     BathFitInput, BCFFitInput, SpectralInterval, BlockDiscretizationPlan,
     DiscretizationPlan, plan_block, PoleBinDiagnostic, BathFitResidual,
@@ -52,11 +54,14 @@ export FlavorLayout, flavors, flavor_index, physical_site, site_modes,
 include(joinpath(@__DIR__, "foundations", "layout.jl"))
 include(joinpath(@__DIR__, "foundations", "partition.jl"))
 include(joinpath(@__DIR__, "foundations", "abstractions.jl"))
+include(joinpath(@__DIR__, "foundations", "local_fermions.jl"))
 include(joinpath(@__DIR__, "bath", "parametrizations.jl"))
 include(joinpath(@__DIR__, "bath", "complex_poles.jl"))
 include(joinpath(@__DIR__, "bath", "discrete_bath.jl"))
 include(joinpath(@__DIR__, "bath", "mounted_baths.jl"))
 include(joinpath(@__DIR__, "topology", "plans.jl"))
+include(joinpath(@__DIR__, "topology", "builders.jl"))
+include(joinpath(@__DIR__, "bath", "mounting.jl"))
 include(joinpath(@__DIR__, "fitting", "nnls.jl"))
 include(joinpath(@__DIR__, "fitting", "input.jl"))
 include(joinpath(@__DIR__, "fitting", "bcf_input.jl"))

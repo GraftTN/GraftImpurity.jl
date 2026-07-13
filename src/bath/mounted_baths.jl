@@ -1,12 +1,13 @@
 """
-    MountedBath(parametrization, topology, phys, sites, anchors, H;
-                diagnostics=(;))
+    AndersonBath(parametrization, topology, phys, sites, anchors, H;
+                 diagnostics=(;))
 
-Typed mounted realization of a canonical Hamiltonian bath. Every canonical
-bath mode owns exactly one mounted site, in the same order as BathOrbitals.
-anchors are explicit and never inferred from a largest coupling component.
+Concrete mounted fermionic realization. Every canonical bath mode owns exactly
+one mounted site, in the same order as `BathOrbitals`.  anchors are explicit
+declared ownership sites and are never inferred from a largest coupling
+component.
 """
-struct MountedBath{B<:AbstractHamiltonianBath,P<:NamedTuple,D<:NamedTuple} <:
+struct AndersonBath{B<:AbstractHamiltonianBath,P<:NamedTuple,D<:NamedTuple} <:
         AbstractMountedBath
     parametrization::B
     topology::TreeTopology
@@ -16,11 +17,41 @@ struct MountedBath{B<:AbstractHamiltonianBath,P<:NamedTuple,D<:NamedTuple} <:
     H::OpSum
     diagnostics::D
 
-    function MountedBath(parametrization::B, topology::TreeTopology,
-                         phys::P, sites::Tuple{Vararg{Symbol}},
-                         anchors::Tuple{Vararg{Symbol}}, H::OpSum,
-                         diagnostics::D, ::Val{:validated}) where {
+    function AndersonBath(parametrization::B, topology::TreeTopology,
+                          phys::P, sites::Tuple{Vararg{Symbol}},
+                          anchors::Tuple{Vararg{Symbol}}, H::OpSum,
+                          diagnostics::D, ::Val{:validated}) where {
                              B<:AbstractHamiltonianBath,P<:NamedTuple,D<:NamedTuple}
+        new{B,P,D}(parametrization, topology, phys, sites, anchors, H,
+                   diagnostics)
+    end
+end
+
+"""
+    BosonBath(parametrization, topology, phys, sites, anchors, H;
+              diagnostics=(;))
+
+Concrete mounted bosonic realization.  It shares the exact mounted-data fields
+with `AndersonBath`, but construction requires an explicitly supplied bosonic
+physical-space and Hamiltonian convention.  Canonical `DiscreteBath` data does
+not contain a local cutoff or a matter-coupling operator convention, so M5 does
+not guess either when mounting it.
+"""
+struct BosonBath{B<:AbstractHamiltonianBath,P<:NamedTuple,D<:NamedTuple} <:
+        AbstractMountedBath
+    parametrization::B
+    topology::TreeTopology
+    phys::P
+    sites::Tuple{Vararg{Symbol}}
+    anchors::Tuple{Vararg{Symbol}}
+    H::OpSum
+    diagnostics::D
+
+    function BosonBath(parametrization::B, topology::TreeTopology,
+                       phys::P, sites::Tuple{Vararg{Symbol}},
+                       anchors::Tuple{Vararg{Symbol}}, H::OpSum,
+                       diagnostics::D, ::Val{:validated}) where {
+                           B<:AbstractHamiltonianBath,P<:NamedTuple,D<:NamedTuple}
         new{B,P,D}(parametrization, topology, phys, sites, anchors, H,
                    diagnostics)
     end
@@ -47,28 +78,132 @@ function _require_topology_node(topology::TreeTopology, label::Symbol,
     return nothing
 end
 
-function MountedBath(parametrization::AbstractHamiltonianBath,
-                     topology::TreeTopology, phys::AbstractDict,
-                     sites::AbstractVector{Symbol}, anchors::AbstractVector{Symbol},
-                     H::OpSum; diagnostics::NamedTuple=(;))
-    length(sites) == length(anchors) ||
-        throw(DimensionMismatch("MountedBath needs one anchor per site"))
-    length(sites) == length(parametrization) ||
-        throw(DimensionMismatch("MountedBath needs one site per canonical bath mode"))
-    allunique(sites) ||
-        throw(ArgumentError("MountedBath site labels must be unique"))
+function _mounted_site_has_ancestor(topology::TreeTopology, node::Symbol,
+                                    ancestor::Symbol)
+    index = Graft.Trees.nodeindex(topology, node)
+    ancestor_index = Graft.Trees.nodeindex(topology, ancestor)
+    while index != 0
+        index == ancestor_index && return true
+        index = topology.parent[index]
+    end
+    return false
+end
 
+function _nearest_impurity_ancestor(topology::TreeTopology, node::Symbol,
+                                    impurity_sites::Tuple{Vararg{Symbol}})
+    index = Graft.Trees.nodeindex(topology, node)
+    while index != 0
+        label = Graft.Trees.nodeid(topology, index)
+        label in impurity_sites && return label
+        index = topology.parent[index]
+    end
+    return nothing
+end
+
+_canonical_mounted_anchors(::AbstractHamiltonianBath) = nothing
+
+function _canonical_mounted_anchors(bath::DiscreteBath)
+    return Tuple(physical_site(bath_layout(bath), owner)
+                 for owner in bath_orbitals(bath).associated_flavors)
+end
+
+function _mounted_ownership_hash(parametrization::AbstractHamiltonianBath,
+                                 topology::TreeTopology,
+                                 sites::Tuple{Vararg{Symbol}},
+                                 anchors::Tuple{Vararg{Symbol}})
+    return hash((:mounted_ownership, topology, sites, anchors))
+end
+
+function _mounted_ownership_hash(bath::DiscreteBath, topology::TreeTopology,
+                                 sites::Tuple{Vararg{Symbol}},
+                                 anchors::Tuple{Vararg{Symbol}})
+    orbitals = bath_orbitals(bath)
+    return hash((:discrete_bath_ownership, topology, sites, anchors,
+                 Tuple(orbitals.associated_flavors),
+                 Tuple(orbitals.block_indices), Tuple(orbitals.pole_indices)))
+end
+
+function _mounted_diagnostics(diagnostics::NamedTuple, ownership_hash::UInt)
+    :ownership_hash in keys(diagnostics) && throw(ArgumentError(
+        "mounted bath diagnostics may not overwrite the canonical ownership hash",
+    ))
+    return merge((; ownership_hash), diagnostics)
+end
+
+function _validated_mounted_fields(parametrization::AbstractHamiltonianBath,
+                                   topology::TreeTopology, phys::AbstractDict,
+                                   sites::AbstractVector{Symbol},
+                                   anchors::AbstractVector{Symbol}, H::OpSum,
+                                   diagnostics::NamedTuple, statistics::Symbol)
+    bath_statistics(parametrization) == statistics ||
+        throw(ArgumentError("mounted $(statistics) bath needs matching canonical statistics"))
+    length(sites) == length(anchors) ||
+        throw(DimensionMismatch("mounted bath needs one anchor per site"))
+    length(sites) == length(parametrization) ||
+        throw(DimensionMismatch("mounted bath needs one site per canonical bath mode"))
+    allunique(sites) ||
+        throw(ArgumentError("mounted bath site labels must be unique"))
+
+    layout = bath_layout(parametrization)
+    impurity_sites = layout_sites(layout)
     physical = _canonical_phys(phys)
     site_tuple = Tuple(Symbol.(sites))
     anchor_tuple = Tuple(Symbol.(anchors))
-    for site in site_tuple
+    canonical_anchors = _canonical_mounted_anchors(parametrization)
+    canonical_anchors === nothing || anchor_tuple == canonical_anchors || throw(ArgumentError(
+        "mounted bath anchors must match canonical associated_flavor ownership",
+    ))
+    for impurity_site in impurity_sites
+        _require_topology_node(topology, impurity_site, "impurity site")
+        hasproperty(physical, impurity_site) || throw(ArgumentError(
+            "mounted impurity site $impurity_site has no physical space",
+        ))
+    end
+    for (site, anchor) in zip(site_tuple, anchor_tuple)
+        site in impurity_sites && throw(ArgumentError(
+            "mounted bath sites must not reuse declared impurity sites",
+        ))
+        anchor in impurity_sites || throw(ArgumentError(
+            "mounted bath anchor $anchor is not a declared impurity site",
+        ))
         _require_topology_node(topology, site, "site")
         hasproperty(physical, site) ||
-            throw(ArgumentError("MountedBath site $site has no physical space"))
-    end
-    for anchor in anchor_tuple
+            throw(ArgumentError("mounted bath site $site has no physical space"))
         _require_topology_node(topology, anchor, "anchor")
+        _mounted_site_has_ancestor(topology, site, anchor) || throw(ArgumentError(
+            "mounted bath site $site is not in the declared owner arm rooted at $anchor",
+        ))
+        _nearest_impurity_ancestor(topology, site, impurity_sites) == anchor || throw(ArgumentError(
+            "mounted bath site $site crosses another declared impurity site before $anchor",
+        ))
     end
-    return MountedBath(parametrization, topology, physical, site_tuple,
-                       anchor_tuple, H, diagnostics, Val(:validated))
+    ownership_hash = _mounted_ownership_hash(parametrization, topology,
+                                             site_tuple, anchor_tuple)
+    return (; physical, site_tuple, anchor_tuple, H,
+            diagnostics=_mounted_diagnostics(diagnostics, ownership_hash))
 end
+
+function AndersonBath(parametrization::AbstractHamiltonianBath,
+                      topology::TreeTopology, phys::AbstractDict,
+                      sites::AbstractVector{Symbol}, anchors::AbstractVector{Symbol},
+                      H::OpSum; diagnostics::NamedTuple=(;))
+    fields = _validated_mounted_fields(parametrization, topology, phys, sites,
+                                       anchors, H, diagnostics, :fermion)
+    return AndersonBath(parametrization, topology, fields.physical,
+                        fields.site_tuple, fields.anchor_tuple, fields.H,
+                        fields.diagnostics, Val(:validated))
+end
+
+function BosonBath(parametrization::AbstractHamiltonianBath,
+                   topology::TreeTopology, phys::AbstractDict,
+                   sites::AbstractVector{Symbol}, anchors::AbstractVector{Symbol},
+                   H::OpSum; diagnostics::NamedTuple=(;))
+    fields = _validated_mounted_fields(parametrization, topology, phys, sites,
+                                       anchors, H, diagnostics, :boson)
+    return BosonBath(parametrization, topology, fields.physical,
+                     fields.site_tuple, fields.anchor_tuple, fields.H,
+                     fields.diagnostics, Val(:validated))
+end
+
+Base.length(bath::AndersonBath) = length(bath.sites)
+Base.length(bath::BosonBath) = length(bath.sites)

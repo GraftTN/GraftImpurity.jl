@@ -121,7 +121,7 @@ end
         :bath_up => ops.P,
         :bath_down => ops.P,
     )
-    mounted = MountedBath(
+    mounted = AndersonBath(
         bath,
         topology,
         physical_spaces,
@@ -133,7 +133,7 @@ end
     @test mounted.sites == (:bath_up, :bath_down)
     @test mounted.anchors == (:impurity, :impurity)
     @test hasproperty(mounted.phys, :bath_up)
-    @test_throws DimensionMismatch MountedBath(
+    @test_throws DimensionMismatch AndersonBath(
         bath,
         topology,
         physical_spaces,
@@ -148,9 +148,9 @@ end
     @test ftps.flavor_order == (:down, :up)
     @test_throws ArgumentError T3NS(layout; flavor_order=[:up, :up])
 
-    @test length(methods(mount_bath)) == 0
+    @test length(methods(mount_bath)) == 1
     @test length(methods(map_bath)) == 0
-    @test length(methods(impurity_topology)) == 0
+    @test length(methods(impurity_topology)) == 2
     @test length(methods(lower_interaction)) == 0
     @test length(methods(audit_partition)) == 0
     @test length(methods(reconstruct_hybridization)) >= 3
@@ -171,8 +171,9 @@ end
     @test !isdefined(GraftImpurity, :fit_bath)
     @test !isdefined(GraftImpurity, :matsubara_reconstruct)
     @test !isdefined(GraftImpurity, :couplings)
-    @test !isdefined(GraftImpurity, :BosonBath)
+    @test isdefined(GraftImpurity, :BosonBath)
     @test !isdefined(GraftImpurity, :AndersonRealPoles)
-    @test !isdefined(GraftImpurity, :AndersonBath)
+    @test isdefined(GraftImpurity, :AndersonBath)
+    @test !isdefined(GraftImpurity, :MountedBath)
     @test !isdefined(GraftImpurity, :solve)
 end

@@ -63,11 +63,10 @@ function realize_bath end
     mount_bath(topology, bath; kwargs...)
 
 Mount a canonical Hamiltonian bath onto an impurity topology while preserving
-declared flavor ownership.
-
-TODO(M5) — no methods yet.
+declared flavor ownership.  The fermionic `DiscreteBath` route is implemented
+in the M5 topology/mounting layer; bosonic values require an explicit local
+cutoff/operator convention.
 """
-# TODO(M5): topology mounting must preserve explicit bath ownership.
 function mount_bath end
 
 """
@@ -85,9 +84,9 @@ function map_bath end
 
 Build a topology from an impurity topology plan and explicit bath ownership.
 
-TODO(M5) — no methods yet.
+M5 implements the `T3NS` and `FTPS` `DiscreteBath` methods.  Other geometry
+plans remain explicit extension points rather than inferred aliases.
 """
-# TODO(M5): production topology builders are deferred.
 function impurity_topology end
 
 """
