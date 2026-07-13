@@ -1,8 +1,8 @@
 """
 GraftImpurity: optional impurity-solver companion package for Graft.jl.
-Forwarded B4 implements boson Hamiltonian real-pole bath fitting plus star/chain
-branch mounting. Finite-T solver glue remains a later milestone; the pole-fit
-surface already returns thermofield real-pole star data.
+Owns boson bath fitting/mounting and finite zero-temperature Anderson stars
+lowered from fermionic PSD real-pole fits. Finite-temperature solver glue
+remains a later milestone.
 
 Never referenced by any lower layer (§9.10). Owns *no* private geometry code
 (§0.1): geometry builders emit plain `Trees.TreeTopology`.
@@ -12,7 +12,11 @@ module GraftImpurity
 using LinearAlgebra: Diagonal, Hermitian, diag, eigen, eigvals, norm, opnorm,
     svd, tr
 using Graft.Trees: TreeTopology, mount_chain, nodeindex
-using Graft.Symbolic: boson_modes, BosonCoupling
+using Graft.Symbolic: OpSum, SiteOp, Term, boson_modes, BosonCoupling,
+    fermion_ops_z2
+using Graft: Purified, TTNS, TruncationScheme, correlator_series, dmrg2!,
+    expect, normalize!, purification_problem, thermal_correlator, thermalize,
+    topology, ttno_from_opsum
 
 export Partition, audit_partition, BathParametrization, RealPoles,
     MatrixRealPoles, ThermofieldRealPoles, ComplexPoles, couplings,
@@ -21,7 +25,8 @@ export Partition, audit_partition, BathParametrization, RealPoles,
     IRCoefficients, fit_ir, evaluate_ir, to_imtime_ir, to_imfreq_ir,
     PESPoleFit, pes_fit, evaluate_poles, bath_orbitals,
     LorentzianPSD, MatrixLorentzianPSD, lorentzian_fit, spectral_density,
-    complex_poles
+    complex_poles,
+    AndersonRealPoles, AndersonBath
 
 # ---------------------------------------------------------------------------
 # §6.2 Partition: a *user declaration* on the impurity orbitals; H_bath never
@@ -638,7 +643,9 @@ end
 """
     solve(bath, H_loc; partition, T, observables, ψ0=nothing) -> (; G, Σ, χ, ψ, U)
 
-Impurity-solver entry point for self-consistency loops. TODO — no methods yet.
+Impurity-solver extension point. The finite zero-temperature
+`AndersonBath`/real-pole method is implemented in `anderson_real_poles.jl`;
+finite-temperature and self-energy-producing methods remain later extensions.
 """
 function solve end
 
@@ -1393,6 +1400,7 @@ end
 
 include("pes_pole_fitting.jl")
 include("lorentzian_psd.jl")
+include("anderson_real_poles.jl")
 include("sparseir_adapter.jl")
 include("precompile.jl")
 

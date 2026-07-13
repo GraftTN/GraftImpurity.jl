@@ -69,5 +69,15 @@ PrecompileTools.@setup_workload begin
             initial_widths=[0.25, 0.35], warn_experimental=false)
         spectral_density(fitted_matrix_lorentzian, real_frequencies)
         complex_poles(fitted_matrix_lorentzian)
+
+        anderson_partition = Partition([[:imp]])
+        anderson_fit = PESPoleFit(
+            [0.4], [reshape(ComplexF64[0.25], 1, 1)], :fermion,
+            (; source=:precompile); residue_constraint=:psd)
+        anderson_ops = fermion_ops_z2()
+        AndersonBath(
+            anderson_fit, anderson_partition;
+            topology=TreeTopology(:imp, Pair{Symbol,Symbol}[]),
+            phys=Dict(:imp => anderson_ops.P), ops=anderson_ops)
     end
 end

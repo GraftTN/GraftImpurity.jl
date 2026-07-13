@@ -50,6 +50,23 @@ an unresolved component from collapsing into a sample-point delta peak; use
 Because every Lorentzian has a full-axis `1 / omega^2` tail, higher spectral
 moments may not exist even when the fitted window looks accurate.
 
+For a finite zero-temperature Anderson star, fit a scalar or matrix Matsubara
+hybridization with `pes_fit(...; statistics=:fermion, solver=:sdp)`, declare
+the residue ordering with a one-block `Partition`, and construct
+`AndersonBath(fit, partition; topology, phys)`. PSD residues are factorized
+into repeated real-energy bath orbitals with complex impurity coupling
+vectors, mounted as graded `fZ2` fermion sites, and lowered to the Hermitian
+star Hamiltonian `sum(epsilon * n) + sum(V * d' * c + conj(V) * d * c')`.
+`solve(problem, H_loc; psi0, ...)` runs two-site DMRG and evaluates requested
+`OpSum` observables. `times` plus `evolver` returns raw particle/hole real-time
+series strictly from the zero-temperature DMRG ground state. Imaginary-time
+series are a separate opt-in path: `taus` requires a finite `beta_eff` and a
+`thermal_evolver`, and uses thermal purification. Both outputs carry
+`convention=:raw_correlator`: no fermionic minus sign or retarded assembly is
+implicit. This first implementation supports one partition block and an
+explicit warm-start `psi0`; it does not manufacture a Fourier transform or
+self-energy.
+
 Representative scalar-NNLS, matrix-SDP, evaluation, bath-factorization, and
 LBFGS paths are cached with `PrecompileTools` to reduce first-call latency.
 A custom `PackageCompiler` sysimage remains a deployment option once the
