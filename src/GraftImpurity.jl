@@ -12,6 +12,7 @@ using LinearAlgebra: Diagonal, Hermitian, I, diag, eigen, eigvals, norm, opnorm,
     svd, tr
 using Graft
 import GreenFunc
+import Optim
 using Graft.Backend: ElementarySpace
 using Graft.Symbolic: OpSum
 using Graft.Trees: TreeTopology
@@ -33,6 +34,8 @@ export FlavorLayout, flavors, flavor_index, physical_site, site_modes,
     DiscretizationPlan, plan_block, PoleBinDiagnostic,
     DiscretizationResult, NonMountablePoleFit,
     QuadratureKernel, BoundaryFitKernel, PESKernel, MiniPoleKernel,
+    CouplingFitKernel, CouplingBlockTie, FreeModeAllocation, SignedModeAllocation,
+    ComplexComponents, RealComponents, EqualTie, ConjugateTie,
     real_pole_bath_fit, fit_complex_bcf, evaluate_bcf,
     realize_bath, mount_bath, map_bath, realize_quasi_lindblad,
     realize_coupled_lindblad,
@@ -64,6 +67,7 @@ include(joinpath(@__DIR__, "fitting", "pes_kernel.jl"))
 include(joinpath(@__DIR__, "fitting", "minipole_engine.jl"))
 include(joinpath(@__DIR__, "fitting", "minipole.jl"))
 include(joinpath(@__DIR__, "fitting", "complex_bcf.jl"))
+include(joinpath(@__DIR__, "fitting", "coupling_fit.jl"))
 include(joinpath(@__DIR__, "fitting", "boundary_fit.jl"))
 include(joinpath(@__DIR__, "lorentzian_psd.jl"))
 include(joinpath(@__DIR__, "sparseir_adapter.jl"))

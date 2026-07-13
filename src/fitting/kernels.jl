@@ -228,3 +228,211 @@ function MiniPoleKernel(; n_poles::Integer,
         throw(ArgumentError("MiniPoleKernel fit_tolerance must be finite and positive"))
     return MiniPoleKernel(count, tolerance, scale, retained, fit, Val(:validated))
 end
+
+"""Allocation policy for the signs of direct-fit bath energies."""
+abstract type AbstractCouplingModeAllocation end
+
+"""Allow every direct-fit bath energy to vary across its declared bounds."""
+struct FreeModeAllocation <: AbstractCouplingModeAllocation end
+
+"""Require exactly `n_negative` direct-fit bath energies to remain below zero."""
+struct SignedModeAllocation <: AbstractCouplingModeAllocation
+    n_negative::Int
+
+    function SignedModeAllocation(n_negative::Int, ::Val{:validated})
+        new(n_negative)
+    end
+end
+
+function SignedModeAllocation(n_negative::Integer)
+    count = Int(n_negative)
+    count >= 0 || throw(ArgumentError(
+        "SignedModeAllocation n_negative must be nonnegative",
+    ))
+    return SignedModeAllocation(count, Val(:validated))
+end
+
+"""Constraint family for direct-fit complex coupling components."""
+abstract type AbstractCouplingComponents end
+
+"""Permit independently optimized real and imaginary coupling components."""
+struct ComplexComponents <: AbstractCouplingComponents end
+
+"""Restrict every direct-fit coupling component to the real subspace."""
+struct RealComponents <: AbstractCouplingComponents end
+
+"""Relation family for explicitly tied named coupling blocks."""
+abstract type AbstractCouplingTieRelation end
+
+"""Derive target couplings by exact equality with the source couplings."""
+struct EqualTie <: AbstractCouplingTieRelation end
+
+"""Derive target couplings by exact complex conjugation of source couplings."""
+struct ConjugateTie <: AbstractCouplingTieRelation end
+
+const _CouplingTieRelation = Union{EqualTie,ConjugateTie}
+
+"""
+    CouplingBlockTie(source, target, relation=EqualTie())
+
+Explicit named-block relation for `CouplingFitKernel`. `target` shares source
+mode parameters during fitting and is then derived exactly. The two supported
+relation values preserve the direct `V * V'` PSD residue parameterization.
+"""
+struct CouplingBlockTie{R<:_CouplingTieRelation}
+    source::Symbol
+    target::Symbol
+    relation::R
+
+    function CouplingBlockTie(source::Symbol, target::Symbol, relation::R,
+                              ::Val{:validated}) where {R<:_CouplingTieRelation}
+        new{R}(source, target, relation)
+    end
+end
+
+function CouplingBlockTie(source::Symbol, target::Symbol,
+                          relation::R) where {R<:_CouplingTieRelation}
+    source != target ||
+        throw(ArgumentError("CouplingBlockTie source and target must differ"))
+    return CouplingBlockTie(source, target, relation, Val(:validated))
+end
+
+CouplingBlockTie(source::Symbol, target::Symbol) =
+    CouplingBlockTie(source, target, EqualTie())
+
+function CouplingBlockTie(source::Symbol, target::Symbol,
+                          relation::AbstractCouplingTieRelation)
+    throw(ArgumentError(
+        "CouplingBlockTie relation must be EqualTie() or ConjugateTie()",
+    ))
+end
+
+function _coupling_bounds(value, name::AbstractString)
+    value === nothing && return nothing
+    value isa Tuple && length(value) == 2 ||
+        throw(ArgumentError("CouplingFitKernel $name must be a two-element tuple"))
+    lower, upper = Float64.(value)
+    span = upper - lower
+    isfinite(lower) && isfinite(upper) && isfinite(span) && span > 0 ||
+        throw(ArgumentError("CouplingFitKernel $name must be finite and ordered"))
+    return (lower, upper)
+end
+
+function _coupling_frequency_window(value)
+    bounds = _coupling_bounds(value, "frequency_window")
+    bounds === nothing && return nothing
+    bounds[1] > 0 || throw(ArgumentError(
+        "CouplingFitKernel frequency_window must be strictly positive",
+    ))
+    return bounds
+end
+
+"""
+    CouplingFitKernel(; n_modes, alpha=1.0, frequency_window=nothing,
+                      energy_bounds=nothing, maxiter=1_000,
+                      optimizer_tolerance=sqrt(eps()), fit_tolerance=nothing,
+                      allocation=FreeModeAllocation(),
+                      components=ComplexComponents(), block_ties=())
+
+Direct fermionic Matsubara coupling-space fit configuration. Every
+independently fitted named block receives `n_modes` real bath energies and
+complex coupling vectors; its raw residues are exactly `V * V'`. `alpha`
+weights the squared Frobenius objective by `abs(omega)^(-alpha)`. An optional
+`SignedModeAllocation` keeps its declared number of modes below zero per
+independent block; `CouplingBlockTie` values derive compatible named blocks
+explicitly. `RealComponents()` restricts coupling components to the real
+subspace, while `ComplexComponents()` retains fully complex off-diagonal
+couplings. Only `EqualTie()` and `ConjugateTie()` are accepted. The cited paper
+prints a weighted Frobenius norm; this kernel uses the corresponding smooth
+weighted least-squares objective so its nonlinear optimizer has one
+deterministic scalar objective to minimize. A finite nonconverged optimization
+remains explicitly labelled `:nonconverged` in the trace; complex per-mode
+global phases are parameterization redundancies, while the returned `V * V'`
+residues are phase-invariant. Set `fit_tolerance` to make each independently
+fitted or tied named block's relative reconstruction threshold a hard
+input-domain acceptance gate. Declared energy bounds are closed: each feasible
+declared endpoint is refined in its coupling components and retained only when
+it strictly improves the weighted objective; the trace records every snap.
+"""
+struct CouplingFitKernel{A<:AbstractCouplingModeAllocation,
+                         C<:AbstractCouplingComponents,T<:Tuple} <:
+        AbstractRealPoleBathFitKernel
+    n_modes::Int
+    alpha::Float64
+    frequency_window::Union{Nothing,Tuple{Float64,Float64}}
+    energy_bounds::Union{Nothing,Tuple{Float64,Float64}}
+    maxiter::Int
+    optimizer_tolerance::Float64
+    fit_tolerance::Union{Nothing,Float64}
+    allocation::A
+    components::C
+    block_ties::T
+
+    function CouplingFitKernel(n_modes::Int, alpha::Float64,
+                               frequency_window::Union{Nothing,Tuple{Float64,Float64}},
+                               energy_bounds::Union{Nothing,Tuple{Float64,Float64}},
+                               maxiter::Int, optimizer_tolerance::Float64,
+                               fit_tolerance::Union{Nothing,Float64}, allocation::A,
+                               components::C, block_ties::T,
+                               ::Val{:validated}) where {A<:AbstractCouplingModeAllocation,
+                                                         C<:AbstractCouplingComponents,T<:Tuple}
+        new{A,C,T}(n_modes, alpha, frequency_window, energy_bounds, maxiter,
+                   optimizer_tolerance, fit_tolerance, allocation, components,
+                   block_ties)
+    end
+end
+
+function CouplingFitKernel(; n_modes::Integer,
+                           alpha::Real=1.0,
+                           frequency_window=nothing,
+                           energy_bounds=nothing,
+                           maxiter::Integer=1_000,
+                           optimizer_tolerance::Real=sqrt(eps(Float64)),
+                           fit_tolerance::Union{Nothing,Real}=nothing,
+                           allocation::AbstractCouplingModeAllocation=FreeModeAllocation(),
+                           components::AbstractCouplingComponents=ComplexComponents(),
+                           block_ties=())
+    modes = Int(n_modes)
+    modes > 0 || throw(ArgumentError("CouplingFitKernel n_modes must be positive"))
+    exponent = Float64(alpha)
+    isfinite(exponent) && 0 <= exponent <= 1 ||
+        throw(ArgumentError("CouplingFitKernel alpha must be finite and lie in [0, 1]"))
+    iterations = Int(maxiter)
+    iterations > 0 || throw(ArgumentError("CouplingFitKernel maxiter must be positive"))
+    tolerance = Float64(optimizer_tolerance)
+    isfinite(tolerance) && tolerance > 0 || throw(ArgumentError(
+        "CouplingFitKernel optimizer_tolerance must be finite and positive",
+    ))
+    quality = fit_tolerance === nothing ? nothing : Float64(fit_tolerance)
+    quality === nothing || (isfinite(quality) && quality > 0) ||
+        throw(ArgumentError("CouplingFitKernel fit_tolerance must be finite and positive"))
+    if allocation isa SignedModeAllocation
+        allocation.n_negative <= modes || throw(ArgumentError(
+            "SignedModeAllocation n_negative must not exceed CouplingFitKernel n_modes",
+        ))
+    elseif !(allocation isa FreeModeAllocation)
+        throw(ArgumentError("CouplingFitKernel allocation is unsupported"))
+    end
+    components isa Union{ComplexComponents,RealComponents} || throw(ArgumentError(
+        "CouplingFitKernel component constraint is unsupported",
+    ))
+    ties = Tuple(block_ties)
+    all(tie -> tie isa CouplingBlockTie, ties) || throw(ArgumentError(
+        "CouplingFitKernel block_ties must contain CouplingBlockTie values",
+    ))
+    all(tie -> tie.relation isa _CouplingTieRelation, ties) || throw(ArgumentError(
+        "CouplingFitKernel block_ties use an unsupported relation",
+    ))
+    targets = Symbol[tie.target for tie in ties]
+    allunique(targets) ||
+        throw(ArgumentError("CouplingFitKernel block-tie targets must be unique"))
+    sources = Set(tie.source for tie in ties)
+    all(target -> !(target in sources), targets) || throw(ArgumentError(
+        "CouplingFitKernel does not permit chained block ties",
+    ))
+    return CouplingFitKernel(
+        modes, exponent, _coupling_frequency_window(frequency_window),
+        _coupling_bounds(energy_bounds, "energy_bounds"), iterations, tolerance,
+        quality, allocation, components, ties, Val(:validated),
+    )
+end

@@ -16,7 +16,7 @@ abstract type AbstractImpuritySolver end
 
 Fit a real-pole expansion through an executable bath-fit kernel.
 """
-# TODO(M3c): add the direct CouplingFitKernel method.
+# TODO(M4): enrich concrete fitting results with report/audit diagnostics.
 function real_pole_bath_fit end
 
 """
