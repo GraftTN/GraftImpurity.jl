@@ -31,7 +31,9 @@ export FlavorLayout, flavors, flavor_index, physical_site, site_modes,
     MountedBath,
     T3NS, FTPS,
     BathFitInput, BCFFitInput, SpectralInterval, BlockDiscretizationPlan,
-    DiscretizationPlan, plan_block, PoleBinDiagnostic,
+    DiscretizationPlan, plan_block, PoleBinDiagnostic, BathFitResidual,
+    BathFitBlockReport, BathFitTiming, BathFitWarning, BathFitReport,
+    BathFitCriteria, BathFitAuditItem, BathFitAudit,
     DiscretizationResult, NonMountablePoleFit,
     QuadratureKernel, BoundaryFitKernel, PESKernel, MiniPoleKernel,
     CouplingFitKernel, CouplingBlockTie, FreeModeAllocation, SignedModeAllocation,
@@ -59,7 +61,11 @@ include(joinpath(@__DIR__, "fitting", "nnls.jl"))
 include(joinpath(@__DIR__, "fitting", "input.jl"))
 include(joinpath(@__DIR__, "fitting", "bcf_input.jl"))
 include(joinpath(@__DIR__, "fitting", "plans.jl"))
+include(joinpath(@__DIR__, "diagnostics", "types.jl"))
+include(joinpath(@__DIR__, "diagnostics", "reconstruction.jl"))
+include(joinpath(@__DIR__, "diagnostics", "report.jl"))
 include(joinpath(@__DIR__, "bath", "realization.jl"))
+include(joinpath(@__DIR__, "diagnostics", "audit.jl"))
 include(joinpath(@__DIR__, "fitting", "kernels.jl"))
 include(joinpath(@__DIR__, "fitting", "quadrature.jl"))
 include(joinpath(@__DIR__, "pes_pole_fitting.jl"))

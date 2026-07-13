@@ -57,6 +57,12 @@ end
     @test greenfunc_input.frequencies == Float64[iw[index] for index in eachindex(iw)]
     @test greenfunc_input.target_labels.spin == ((:up, :down), (:up, :down))
     @test GraftImpurity._validate_fit_input(greenfunc_input, partition) === greenfunc_input
+    @test_throws ArgumentError BathFitInput(
+        layout, gf, :spin; metadata=(; component=:spectral),
+    )
+    @test_throws ArgumentError BathFitInput(
+        layout, BlockGf(:spin => gf); metadata=(; temperature=ZeroTemperature()),
+    )
     bad_labels = Gf(iw; target_shape=(2, 2), data=gf_data, statistics=true,
                     component=:matsubara,
                     target_labels=((:down, :up), (:down, :up)))
@@ -81,6 +87,18 @@ end
     @test realized.report.diagnostics[1].minimum_eigenvalue >= -1e-12
     @test realized.plan.blocks.spin.intervals isa Tuple
     @test first(realized.plan.blocks.spin.intervals).forced_poles isa Tuple
+    @test_throws ArgumentError realize_bath(
+        input, expansion, partition;
+        orbital_order=(; spin=[:up, :down]), broadening=0.1,
+    )
+    trace_broadening_result = realize_bath(
+        input,
+        PoleExpansion(expansion.poles; kernel=:synthetic,
+                      trace=(; plan, broadening=0.1)),
+        partition; orbital_order=(; spin=[:up, :down]),
+    )
+    @test trace_broadening_result isa DiscretizationResult
+    @test trace_broadening_result.report.broadening === nothing
     mutable_order = Dict(:spin => [:up, :down])
     dictionary_order_result = realize_bath(
         input, expansion, partition; orbital_order=mutable_order,

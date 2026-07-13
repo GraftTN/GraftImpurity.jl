@@ -9,6 +9,9 @@ function _validate_real_axis_fit(input::BathFitInput,
     _validate_fit_input(input, partition)
     input.domain === :real_axis ||
         throw(ArgumentError("this kernel requires BathFitInput domain=:real_axis"))
+    input.statistics === :fermion || throw(ArgumentError(
+        "real-axis Quadrature/BoundaryFit kernels currently implement only the fermionic spectral convention; use a boson-aware kernel rather than reinterpret bosonic residues",
+    ))
     Tuple(keys(plan.blocks)) == block_names(partition) ||
         throw(ArgumentError("DiscretizationPlan block names must match Partition"))
     return nothing
@@ -153,14 +156,16 @@ by deleting or diagonalizing off-diagonal data here.
 """
 function real_pole_bath_fit(input::BathFitInput, kernel::QuadratureKernel,
                             partition::Partition)
+    started = time_ns()
     _validate_real_axis_fit(input, kernel.plan, partition)
     _fit_input_component(input) === :spectral ||
         throw(ArgumentError("QuadratureKernel requires component=:spectral input"))
-    return _quadrature_expansion(
+    expansion = _quadrature_expansion(
         input, kernel.plan, partition, :quadrature,
         (; rule=kernel.rule, algorithm=:direct_bin_integration,
            source_metadata=input.metadata),
     )
+    return _with_fit_timing(expansion, started)
 end
 
 function _spectral_from_bins(poles::AbstractVector{<:Real},

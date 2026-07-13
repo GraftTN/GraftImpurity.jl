@@ -1,36 +1,11 @@
-abstract type AbstractBathFitReport end
-
-"""
-    PoleBinDiagnostic
-
-Numerical evidence for one raw pole residue at the common realization gate.
-The original expansion is never changed to make this diagnostic pass.
-"""
-struct PoleBinDiagnostic
-    pole_index::Int
-    block::Symbol
-    hermiticity_error::Float64
-    minimum_eigenvalue::Float64
-    tolerance::Float64
-    pivots::Vector{Float64}
-    reconstruction_error::Float64
-    status::Symbol
-end
-
-struct PendingBathFitReport{T<:NamedTuple} <: AbstractBathFitReport
-    trace::T
-    diagnostics::Vector{PoleBinDiagnostic}
-end
-
 """
     DiscretizationResult(expansion, bath, plan, report)
 
-Successful Hamiltonian realization of a `PoleExpansion`. The M3 report slot is
-typed but intentionally carries only kernel trace and residue-gate evidence;
-M4 replaces it with the concrete block-preserving BathFitReport.
+Successful Hamiltonian realization of a `PoleExpansion` with its concrete,
+block-preserving `BathFitReport`.
 """
 struct DiscretizationResult{E<:PoleExpansion,B<:DiscreteBath,
-                            P<:DiscretizationPlan,R<:AbstractBathFitReport}
+                            P<:DiscretizationPlan,R<:BathFitReport}
     expansion::E
     bath::B
     plan::P
@@ -46,7 +21,7 @@ diagnostics instead of projecting, dropping off-diagonal entries, or falling
 back to a diagonal bath.
 """
 struct NonMountablePoleFit{E<:PoleExpansion,P<:DiscretizationPlan,
-                           R<:AbstractBathFitReport}
+                           R<:BathFitReport}
     expansion::E
     plan::P
     report::R
@@ -387,7 +362,7 @@ end
 
 """
     realize_bath(input, expansion, partition; orbital_order=nothing,
-                 atol=0, rtol=sqrt(eps()))
+                 atol=0, rtol=sqrt(eps()), broadening=nothing)
 
 Run the common Hamiltonian-realizability gate for a kernel-produced real-pole
 expansion. A valid expansion becomes a canonical `DiscreteBath`; a finite but
@@ -398,7 +373,8 @@ function realize_bath(input::BathFitInput, expansion::PoleExpansion,
                       partition::Partition;
                       orbital_order=nothing,
                       atol::Real=0.0,
-                      rtol::Real=sqrt(eps(Float64)))
+                      rtol::Real=sqrt(eps(Float64)),
+                      broadening=nothing)
     _validate_fit_input(input, partition)
     expansion.poles.layout == input.layout ||
         throw(ArgumentError("PoleExpansion FlavorLayout does not match BathFitInput"))
@@ -406,24 +382,30 @@ function realize_bath(input::BathFitInput, expansion::PoleExpansion,
         throw(ArgumentError("PoleExpansion Partition does not match realization Partition"))
     expansion.poles.statistics == input.statistics ||
         throw(ArgumentError("PoleExpansion statistics do not match BathFitInput"))
+    _validate_realization_broadening(input, expansion, broadening)
 
     plan = _realization_plan(expansion, partition)
     requested_order = _realization_orbital_order(expansion, orbital_order)
     resolved_order = _canonical_realization_orbital_order(
         expansion, requested_order,
     )
+    started = time_ns()
     attempted = _attempt_factorization(
         expansion.poles; orbital_order=resolved_order, atol, rtol,
     )
-    report = PendingBathFitReport(
-        (; kernel=expansion.kernel, expansion_trace=expansion.trace,
-           realization_orbital_order=resolved_order),
-        attempted.diagnostics,
-    )
+    realization_seconds = (time_ns() - started) / 1e9
     if attempted.orbitals === nothing
+        report = _bathfit_report(
+            expansion, input, plan, nothing, attempted.diagnostics,
+            resolved_order, realization_seconds; broadening,
+        )
         return NonMountablePoleFit(expansion, plan, report)
     end
     bath = DiscreteBath(expansion.poles.layout, partition, attempted.orbitals;
                         statistics=expansion.poles.statistics)
+    report = _bathfit_report(
+        expansion, input, plan, bath, attempted.diagnostics,
+        resolved_order, realization_seconds; broadening,
+    )
     return DiscretizationResult(expansion, bath, plan, report)
 end

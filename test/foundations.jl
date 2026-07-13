@@ -153,8 +153,8 @@ end
     @test length(methods(impurity_topology)) == 0
     @test length(methods(lower_interaction)) == 0
     @test length(methods(audit_partition)) == 0
-    @test length(methods(reconstruct_hybridization)) == 0
-    @test length(methods(audit_bathfit)) == 0
+    @test length(methods(reconstruct_hybridization)) >= 3
+    @test length(methods(audit_bathfit)) == 1
     @test length(methods(audit_symmetry)) == 0
     @test length(methods(realize_quasi_lindblad)) == 0
     @test length(methods(realize_coupled_lindblad)) == 0

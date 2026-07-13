@@ -175,6 +175,7 @@ Use `realize_bath` to turn a non-mountable trace into the typed
 """
 function real_pole_bath_fit(input::BathFitInput, kernel::BoundaryFitKernel,
                             partition::Partition)
+    started = time_ns()
     _validate_real_axis_fit(input, kernel.plan, partition)
     component = _fit_input_component(input)
     component in (:spectral, :retarded) ||
@@ -223,7 +224,7 @@ function real_pole_bath_fit(input::BathFitInput, kernel::BoundaryFitKernel,
                diagnostics=candidate.diagnostics, mountable=candidate.mountable,
                status=candidate.status, message=candidate.message)
              for candidate in candidates]
-    return PoleExpansion(
+    expansion = PoleExpansion(
         raw;
         kernel=:boundary_fit,
         trace=(; plan=best.plan, component, broadening=kernel.broadening,
@@ -234,4 +235,5 @@ function real_pole_bath_fit(input::BathFitInput, kernel::BoundaryFitKernel,
                selection_policy=kernel.selection_policy,
                source_metadata=input.metadata),
     )
+    return _with_fit_timing(expansion, started)
 end

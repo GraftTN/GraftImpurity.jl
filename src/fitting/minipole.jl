@@ -347,11 +347,17 @@ Fit a finite real-pole Hamiltonian expansion. The adapter uses the shared
 matrix-ESPRIT engine only on a conformal moment sequence and retains full raw
 matrix residues for the common `realize_bath` PSD/LDL-dagger gate. It rejects
 complex or nonfinite energy candidates as incompatible with this *selected*
-Hamiltonian route; `fit_complex_bcf` is the explicit complex BCF route.
+Hamiltonian route; `fit_complex_bcf` is the explicit complex BCF route. The
+real-Hamiltonian adapter currently has the fermionic resolvent convention;
+bosonic Matsubara inputs are explicitly directed to `PESKernel`.
 """
 function real_pole_bath_fit(input::BathFitInput, kernel::MiniPoleKernel,
                             partition::Partition)
+    started = time_ns()
     _validate_matsubara_fit(input, partition; kernel_name="MiniPoleKernel")
+    input.statistics === :fermion || throw(ArgumentError(
+        "MiniPoleKernel real-Hamiltonian output currently implements only the fermionic resolvent convention; use PESKernel for the bosonic convention",
+    ))
     permutation, frequencies = _minipole_uniform_matsubara(input)
     poles = Float64[]
     residues = Matrix{ComplexF64}[]
@@ -369,11 +375,12 @@ function real_pole_bath_fit(input::BathFitInput, kernel::MiniPoleKernel,
     end
     raw = BlockRealPoles(input.layout, partition, poles, residues, block_indices;
                          statistics=input.statistics)
-    return PoleExpansion(
+    expansion = PoleExpansion(
         raw;
         kernel=:minipole,
         trace=(; plan=DiscretizationPlan(partition), fits,
                algorithm=:minipole_conformal_matrix_esprit,
                source_metadata=input.metadata),
     )
+    return _with_fit_timing(expansion, started)
 end

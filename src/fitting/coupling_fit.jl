@@ -520,6 +520,7 @@ canonical factorization and ownership gate.
 """
 function real_pole_bath_fit(input::BathFitInput, kernel::CouplingFitKernel,
                             partition::Partition)
+    started = time_ns()
     order, selected, frequencies = _coupling_selected_grid(input, kernel, partition)
     bounds = _coupling_energy_bounds(kernel, frequencies)
     target_blocks = Set(tie.target for tie in kernel.block_ties)
@@ -565,7 +566,7 @@ function real_pole_bath_fit(input::BathFitInput, kernel::CouplingFitKernel,
     end
     raw = BlockRealPoles(input.layout, partition, poles, residues, block_indices;
                          statistics=input.statistics)
-    return PoleExpansion(
+    expansion = PoleExpansion(
         raw;
         kernel=:coupling_fit,
         trace=(; plan=DiscretizationPlan(partition), fits=diagnostics,
@@ -574,4 +575,5 @@ function real_pole_bath_fit(input::BathFitInput, kernel::CouplingFitKernel,
                components=kernel.components,
                block_ties=kernel.block_ties, source_metadata=input.metadata),
     )
+    return _with_fit_timing(expansion, started)
 end

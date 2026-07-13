@@ -54,6 +54,7 @@ end
     expansion = real_pole_bath_fit(input, kernel, partition)
     @test expansion.kernel === :coupling_fit
     @test expansion.trace.source_metadata == input.metadata
+    @test isfinite(expansion.trace.fit_seconds) && expansion.trace.fit_seconds >= 0
     @test expansion.trace.fits[1].selected_modes == 2
     @test expansion.trace.fits[1].frequency_count < length(frequencies)
     @test expansion.trace.fits[1].error.relative_l2 < 1e-5
@@ -381,6 +382,12 @@ end
     )
     @test short_fit.trace.fits[1].status === :nonconverged
     @test !short_fit.trace.fits[1].optimizer.converged
+    short_result = realize_bath(
+        input, short_fit, partition; orbital_order=(; spin=[:up, :down]),
+    )
+    @test any(warning -> warning.code === :fit_nonconverged &&
+                        warning.block === :spin,
+              short_result.report.warnings)
 
     @test_throws ArgumentError CouplingFitKernel(n_modes=1, alpha=-1)
     @test_throws ArgumentError CouplingFitKernel(n_modes=1, alpha=1.1)

@@ -3,7 +3,9 @@
 
 Executable real-axis spectral discretization by direct bin integration. The
 kernel owns only its immutable allocation plan and quadrature policy; source
-data and output expansions are supplied per call.
+data and output expansions are supplied per call. Its current bin-residue
+convention is fermionic only; bosonic real-axis fitting requires a distinct
+kernel and is rejected rather than being reinterpreted.
 """
 struct QuadratureKernel{P<:DiscretizationPlan} <: AbstractRealPoleBathFitKernel
     plan::P
@@ -31,6 +33,8 @@ declared support gaps and exact forced-pole positions remain valid.
 `residue_solver=:auto` uses direct bin integration for spectral input and
 complex linear least squares for retarded input. An explicit immutable
 `orbital_order` is carried into both preflight and default realization.
+This real-axis residue convention is fermionic only; bosonic data is rejected
+until a separately defined bosonic real-axis kernel is implemented.
 """
 struct BoundaryFitKernel{P<:DiscretizationPlan,O} <: AbstractRealPoleBathFitKernel
     plan::P

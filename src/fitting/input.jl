@@ -7,7 +7,7 @@ The input owns no algorithm state: it records only the caller's basis token,
 source samples, and source metadata needed to preserve the named block
 contract through fitting and realization.
 """
-struct BathFitInput{B<:NamedTuple,L<:NamedTuple,M<:NamedTuple}
+struct BathFitInput{B<:NamedTuple,L<:NamedTuple,M<:NamedTuple,S}
     layout::FlavorLayout
     domain::Symbol
     statistics::Symbol
@@ -15,13 +15,16 @@ struct BathFitInput{B<:NamedTuple,L<:NamedTuple,M<:NamedTuple}
     blocks::B
     target_labels::L
     metadata::M
+    source_template::S
 
     function BathFitInput(layout::FlavorLayout, domain::Symbol,
                           statistics::Symbol, frequencies::Vector{Float64},
                           blocks::B, target_labels::L, metadata::M,
-                          ::Val{:validated}) where {B<:NamedTuple,L<:NamedTuple,M<:NamedTuple}
-        new{B,L,M}(layout, domain, statistics, frequencies, blocks,
-                   target_labels, metadata)
+                          source_template::S,
+                          ::Val{:validated}) where {B<:NamedTuple,L<:NamedTuple,
+                                                     M<:NamedTuple,S}
+        new{B,L,M,S}(layout, domain, statistics, frequencies, blocks,
+                     target_labels, metadata, source_template)
     end
 end
 
@@ -95,7 +98,7 @@ function BathFitInput(layout::FlavorLayout,
     canonical = NamedTuple{Tuple(names)}(samples)
     labels = NamedTuple{Tuple(names)}(ntuple(_ -> nothing, length(names)))
     return BathFitInput(layout, domain, statistics, values, canonical, labels,
-                        metadata, Val(:validated))
+                        metadata, nothing, Val(:validated))
 end
 
 function _greenfunc_domain(gf::GreenFunc.Gf)
@@ -140,6 +143,26 @@ end
 # `collect(mesh)`'s element-type allocation path.
 _greenfunc_frequency_values(mesh) = Float64[mesh[index] for index in eachindex(mesh)]
 
+_copy_greenfunc_template(gf::GreenFunc.Gf) = copy(gf)
+
+function _copy_greenfunc_template(blocks::GreenFunc.BlockGf)
+    return GreenFunc.BlockGf(
+        (name => copy(blocks[name]) for name in keys(blocks))...,
+    )
+end
+
+function _greenfunc_source_metadata(component::Symbol, temperature,
+                                    metadata::NamedTuple)
+    protected = (:source, :component, :temperature)
+    collision = findfirst(name -> hasproperty(metadata, name), protected)
+    collision === nothing || throw(ArgumentError(
+        "GreenFunc source metadata key $(protected[collision]) is reserved",
+    ))
+    return merge(
+        (; source=:greenfunc, component, temperature), metadata,
+    )
+end
+
 function BathFitInput(layout::FlavorLayout, gf::GreenFunc.Gf,
                       block::Symbol; metadata::NamedTuple=(;))
     domain = _greenfunc_domain(gf)
@@ -147,9 +170,8 @@ function BathFitInput(layout::FlavorLayout, gf::GreenFunc.Gf,
     frequencies = _greenfunc_frequency_values(mesh)
     samples = _greenfunc_samples(gf)
     statistics = gf.statistics ? :fermion : :boson
-    source_metadata = merge(
-        (; source=:greenfunc, component=gf.component, temperature=gf.temperature),
-        metadata,
+    source_metadata = _greenfunc_source_metadata(
+        gf.component, gf.temperature, metadata,
     )
     input = BathFitInput(layout, frequencies, block => samples;
                           domain, statistics,
@@ -157,7 +179,8 @@ function BathFitInput(layout::FlavorLayout, gf::GreenFunc.Gf,
     labels = NamedTuple{(block,)}((_greenfunc_labels(gf),))
     return BathFitInput(layout, input.domain, input.statistics,
                         input.frequencies, input.blocks, labels,
-                        input.metadata, Val(:validated))
+                        input.metadata, _copy_greenfunc_template(gf),
+                        Val(:validated))
 end
 
 function BathFitInput(layout::FlavorLayout, blocks::GreenFunc.BlockGf;
@@ -171,13 +194,12 @@ function BathFitInput(layout::FlavorLayout, blocks::GreenFunc.BlockGf;
     labels = Tuple(_greenfunc_labels(blocks[name]) for name in names)
     canonical = NamedTuple{names}(samples)
     target_labels = NamedTuple{names}(labels)
-    source_metadata = merge(
-        (; source=:greenfunc, component=blocks.component,
-           temperature=blocks.temperature),
-        metadata,
+    source_metadata = _greenfunc_source_metadata(
+        blocks.component, blocks.temperature, metadata,
     )
     return BathFitInput(layout, domain, statistics, frequencies, canonical,
-                        target_labels, source_metadata, Val(:validated))
+                        target_labels, source_metadata,
+                        _copy_greenfunc_template(blocks), Val(:validated))
 end
 
 function _validate_fit_input(input::BathFitInput, partition::Partition)

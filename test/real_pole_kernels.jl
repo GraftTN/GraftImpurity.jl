@@ -120,11 +120,23 @@ end
     )
     @test scalar_expansion.kernel === :quadrature
     @test scalar_expansion.trace.source_metadata == scalar_input.metadata
+    @test isfinite(scalar_expansion.trace.fit_seconds) &&
+          scalar_expansion.trace.fit_seconds >= 0
     @test 0.0 in scalar_expansion.poles.poles
     @test sum(real(residue[1, 1]) for residue in scalar_expansion.poles.residues) ≈ 1.0 atol=1e-12
     scalar_result = realize_bath(scalar_input, scalar_expansion, scalar_partition)
     @test scalar_result isa DiscretizationResult
     @test _bath_block_residue(scalar_result.bath, 1)[1, 1] ≈ 1.0 atol=1e-12
+    @test scalar_result.report.reconstruction === nothing
+    @test any(warning -> warning.code === :reconstruction_unavailable,
+              scalar_result.report.warnings)
+    @test_throws ArgumentError real_pole_bath_fit(
+        BathFitInput(
+            scalar_layout, frequencies, :charge => scalar_spectrum;
+            domain=:real_axis, statistics=:boson,
+        ),
+        quadrature, scalar_partition,
+    )
 
     matrix_layout = _kernel_layout([:up, :down]; basis=:matrix_kernel)
     matrix_partition = Partition(:spin => [:up, :down])
@@ -172,6 +184,8 @@ end
     )
     @test boundary_expansion.kernel === :boundary_fit
     @test boundary_expansion.trace.source_metadata == matrix_input.metadata
+    @test isfinite(boundary_expansion.trace.fit_seconds) &&
+          boundary_expansion.trace.fit_seconds >= 0
     @test length(boundary_expansion.trace.boundary_curve) == 2
     @test any(residue -> abs(residue[1, 2]) > 0,
               boundary_expansion.poles.residues)
@@ -180,6 +194,15 @@ end
         orbital_order=(; spin=[:up, :down]),
     )
     @test boundary_result isa DiscretizationResult
+    @test boundary_result.report.broadening == boundary.broadening
+    @test length(boundary_result.report.blocks.spin.boundary_curve) == 2
+    @test_throws ArgumentError real_pole_bath_fit(
+        BathFitInput(
+            matrix_layout, frequencies, :spin => matrix_spectrum;
+            domain=:real_axis, statistics=:boson,
+        ),
+        boundary, matrix_partition,
+    )
 
     gapped_boundary_plan = DiscretizationPlan(
         :spin => BlockDiscretizationPlan(
@@ -222,6 +245,12 @@ end
     )
     @test any(candidate -> candidate.status === :invalid,
               out_of_mesh_expansion.trace.boundary_curve)
+    out_of_mesh_result = realize_bath(
+        matrix_input, out_of_mesh_expansion, matrix_partition;
+        orbital_order=(; spin=[:up, :down]),
+    )
+    @test any(warning -> warning.code === :boundary_candidate_invalid,
+              out_of_mesh_result.report.warnings)
 
     singular_spectrum = Matrix{ComplexF64}[
         abs(frequency) <= 1 ? ComplexF64[0.5 0; 0 0] : zeros(ComplexF64, 2, 2)
@@ -315,6 +344,8 @@ end
     )
     @test pes_expansion.kernel === :pes
     @test pes_expansion.trace.source_metadata == matsubara_input.metadata
+    @test isfinite(pes_expansion.trace.fit_seconds) &&
+          pes_expansion.trace.fit_seconds >= 0
     @test pes_expansion.poles.block_indices == fill(1, length(pes_expansion.poles))
     @test length(pes_expansion.trace.fits) == 1
     pes_result = realize_bath(matsubara_input, pes_expansion, scalar_partition)
@@ -323,12 +354,35 @@ end
                        reshape(ComplexF64[value], 1, 1))
                   for (frequency, value) in zip(matsubara_frequencies, matsubara_values)) < 2e-2
 
+    boson_energy = 0.75
+    boson_residue = 0.6
+    boson_values = ComplexF64[
+        boson_energy * boson_residue / (im * frequency - boson_energy)
+        for frequency in matsubara_frequencies
+    ]
+    boson_input = BathFitInput(
+        scalar_layout, matsubara_frequencies, :charge => boson_values;
+        domain=:matsubara, statistics=:boson,
+    )
+    boson_pes = real_pole_bath_fit(
+        boson_input,
+        PESKernel(n_poles=1, solver=:sdp, maxiter=0,
+                  min_support=4, max_support=4),
+        scalar_partition,
+    )
+    boson_result = realize_bath(boson_input, boson_pes, scalar_partition)
+    @test boson_result isa DiscretizationResult
+    @test boson_result.report.reconstruction isa BathFitInput
+    @test boson_result.report.blocks.charge.residual.relative_l2 < 1e-6
+
     minipole_expansion = real_pole_bath_fit(
         matsubara_input, MiniPoleKernel(n_poles=2), scalar_partition,
     )
     @test minipole_expansion.kernel === :minipole
     @test minipole_expansion.trace.algorithm === :minipole_conformal_matrix_esprit
     @test minipole_expansion.trace.source_metadata == matsubara_input.metadata
+    @test isfinite(minipole_expansion.trace.fit_seconds) &&
+          minipole_expansion.trace.fit_seconds >= 0
     @test minipole_expansion.trace.fits[1].selected_poles == 2
     @test minipole_expansion.trace.fits[1].selected_attempt.training_error.relative_l2 < 1e-8
     @test sort(minipole_expansion.poles.poles) ≈ [-0.75, 0.5] atol=1e-8
@@ -337,6 +391,13 @@ end
                   for (frequency, value) in zip(matsubara_frequencies, matsubara_values)) < 1e-8
     @test realize_bath(matsubara_input, minipole_expansion, scalar_partition) isa
           DiscretizationResult
+    @test_throws ArgumentError real_pole_bath_fit(
+        BathFitInput(
+            scalar_layout, matsubara_frequencies, :charge => matsubara_values;
+            domain=:matsubara, statistics=:boson,
+        ),
+        MiniPoleKernel(n_poles=2), scalar_partition,
+    )
     heldout_minipole = real_pole_bath_fit(
         matsubara_input, MiniPoleKernel(n_poles=2, holdout_count=2),
         scalar_partition,

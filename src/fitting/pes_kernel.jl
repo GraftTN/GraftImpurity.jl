@@ -22,6 +22,7 @@ ordered factorization remain exclusively the responsibility of `realize_bath`.
 """
 function real_pole_bath_fit(input::BathFitInput, kernel::PESKernel,
                             partition::Partition)
+    started = time_ns()
     _validate_matsubara_fit(input, partition; kernel_name="PESKernel")
     frequencies = im .* input.frequencies
     poles = Float64[]
@@ -47,7 +48,7 @@ function real_pole_bath_fit(input::BathFitInput, kernel::PESKernel,
     end
     raw = BlockRealPoles(input.layout, partition, poles, residues, block_indices;
                          statistics=input.statistics)
-    return PoleExpansion(
+    expansion = PoleExpansion(
         raw;
         kernel=:pes,
         trace=(; plan=DiscretizationPlan(partition), fits,
@@ -55,4 +56,5 @@ function real_pole_bath_fit(input::BathFitInput, kernel::PESKernel,
                conic_diagnostic=kernel.conic_diagnostic,
                source_metadata=input.metadata),
     )
+    return _with_fit_timing(expansion, started)
 end

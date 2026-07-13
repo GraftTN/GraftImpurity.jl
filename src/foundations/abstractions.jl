@@ -16,7 +16,6 @@ abstract type AbstractImpuritySolver end
 
 Fit a real-pole expansion through an executable bath-fit kernel.
 """
-# TODO(M4): enrich concrete fitting results with report/audit diagnostics.
 function real_pole_bath_fit end
 
 """
@@ -56,9 +55,8 @@ function realize_coupled_lindblad end
     realize_bath(input, expansion, partition)
 
 Validate real-pole Hamiltonian realizability and form a canonical DiscreteBath
-or typed non-mountable result.
+or typed non-mountable result with a concrete BathFitReport.
 """
-# TODO(M4): enrich the M3 realization evidence with BathFitReport diagnostics.
 function realize_bath end
 
 """
@@ -116,29 +114,26 @@ function audit_partition end
     factorize_residues(expansion; kwargs...)
 
 Factor validated PSD residues into canonical BathOrbitals with explicit
-within-block ownership order.
+within-block ownership order. `realize_bath` retains the associated typed
+factorization diagnostics in its BathFitReport.
 """
-# TODO(M4): attach factorization details to the concrete BathFitReport.
 function factorize_residues end
 
 """
     reconstruct_hybridization(bath, mesh; broadening=nothing)
 
-Reconstruct a hybridization from a canonical discrete bath.
-
-TODO(M4) — no methods yet.
+Reconstruct a hybridization from a canonical discrete bath on a typed
+`BathFitInput`, `GreenFunc.Gf`, or `GreenFunc.BlockGf` mesh/template. Real-axis
+reconstruction requires an explicit positive broadening; Matsubara
+reconstruction rejects nonzero broadening.
 """
-# TODO(M4): reconstruction requires typed report/mesh semantics.
 function reconstruct_hybridization end
 
 """
     audit_bathfit(report, criteria)
 
 Evaluate explicit bath-fit acceptance criteria.
-
-TODO(M4) — no methods yet.
 """
-# TODO(M4): diagnostics and criteria are introduced together.
 function audit_bathfit end
 
 """
