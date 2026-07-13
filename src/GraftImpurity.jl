@@ -31,6 +31,7 @@ export FlavorLayout, flavors, flavor_index, physical_site, site_modes,
     BathFitInput, SpectralInterval, BlockDiscretizationPlan,
     DiscretizationPlan, plan_block, PoleBinDiagnostic,
     DiscretizationResult, NonMountablePoleFit,
+    QuadratureKernel, BoundaryFitKernel, PESKernel,
     real_pole_bath_fit, realize_bath, mount_bath, map_bath,
     impurity_topology, lower_interaction, audit_partition, factorize_residues,
     reconstruct_hybridization, audit_bathfit, audit_symmetry,
@@ -51,7 +52,11 @@ include(joinpath(@__DIR__, "fitting", "nnls.jl"))
 include(joinpath(@__DIR__, "fitting", "input.jl"))
 include(joinpath(@__DIR__, "fitting", "plans.jl"))
 include(joinpath(@__DIR__, "bath", "realization.jl"))
+include(joinpath(@__DIR__, "fitting", "kernels.jl"))
+include(joinpath(@__DIR__, "fitting", "quadrature.jl"))
 include(joinpath(@__DIR__, "pes_pole_fitting.jl"))
+include(joinpath(@__DIR__, "fitting", "pes_kernel.jl"))
+include(joinpath(@__DIR__, "fitting", "boundary_fit.jl"))
 include(joinpath(@__DIR__, "lorentzian_psd.jl"))
 include(joinpath(@__DIR__, "sparseir_adapter.jl"))
 

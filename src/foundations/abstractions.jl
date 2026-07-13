@@ -14,10 +14,8 @@ abstract type AbstractImpuritySolver end
     real_pole_bath_fit(input, kernel, partition)
 
 Fit a real-pole expansion through an executable bath-fit kernel.
-
-TODO(M3) — no methods yet.
 """
-# TODO(M3): concrete kernel methods belong to the fitting milestone.
+# TODO(M3c): add MiniPoleKernel and CouplingFitKernel methods.
 function real_pole_bath_fit end
 
 """

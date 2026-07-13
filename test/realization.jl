@@ -81,6 +81,13 @@ end
     @test realized.report.diagnostics[1].minimum_eigenvalue >= -1e-12
     @test realized.plan.blocks.spin.intervals isa Tuple
     @test first(realized.plan.blocks.spin.intervals).forced_poles isa Tuple
+    mutable_order = Dict(:spin => [:up, :down])
+    dictionary_order_result = realize_bath(
+        input, expansion, partition; orbital_order=mutable_order,
+    )
+    mutable_order[:spin][1] = :down
+    @test dictionary_order_result.report.trace.realization_orbital_order ==
+          (; spin=(:up, :down))
 
     zero_pivot = ComplexF64[0 0; 0 1]
     singular = PoleExpansion(
@@ -106,6 +113,22 @@ end
                            statistics=:fermion)
     @test length(factorize_residues(tiny)) == 1
     @test factorize_residues(tiny).couplings[1][1]^2 ≈ 1e-10
+    tiny_input = BathFitInput(
+        tiny_layout, [-1.0, 1.0], :tiny => ComplexF64[0.0, 0.0];
+        domain=:matsubara, statistics=:fermion,
+    )
+    nearly_real = BlockRealPoles(
+        tiny_layout, tiny_partition, [0.2], ComplexF64[1 + 1e-10im], [1];
+        statistics=:fermion,
+    )
+    nearly_real_expansion = PoleExpansion(nearly_real; kernel=:synthetic)
+    nearly_real_result = realize_bath(
+        tiny_input, nearly_real_expansion, tiny_partition; rtol=1e-8,
+    )
+    @test nearly_real_result isa DiscretizationResult
+    @test nearly_real_result.report.diagnostics[1].status === :numerical_symmetrization
+    @test nearly_real_result.report.diagnostics[1].reconstruction_error ≈ 1e-10
+    @test_throws ArgumentError factorize_residues(nearly_real; rtol=1e-8)
 
     reversed = PoleExpansion(
         BlockRealPoles(layout, partition, [0.5], [ComplexF64[1 0; 0 0]], [1];

@@ -247,13 +247,21 @@ function _scalar_factorization(residue::Number, pole_index::Int,
         )
         return (; vectors=nothing, diagnostic)
     elseif weight <= zero_tolerance
-        status = iszero(weight) ? :valid : :numerical_zero
-        reconstruction_error = abs(weight)
+        reconstruction_error = abs(value)
         reconstruction_error <= tolerance ||
             return (; vectors=nothing, diagnostic=PoleBinDiagnostic(
                 pole_index, block, hermiticity_error, weight, tolerance,
                 [0.0], reconstruction_error, :reconstruction_failure,
             ))
+        status = if hermiticity_error > 0 && !iszero(weight)
+            :numerical_symmetrization_and_zero
+        elseif hermiticity_error > 0
+            :numerical_symmetrization
+        elseif iszero(weight)
+            :valid
+        else
+            :numerical_zero
+        end
         diagnostic = PoleBinDiagnostic(
             pole_index, block, hermiticity_error, weight, tolerance,
             [0.0], reconstruction_error, status,
@@ -261,9 +269,11 @@ function _scalar_factorization(residue::Number, pole_index::Int,
         return (; vectors=Tuple{Vector{ComplexF64},Symbol}[], diagnostic)
     end
     vector = ComplexF64[sqrt(weight)]
+    reconstruction_error = abs(value - weight)
+    status = hermiticity_error > 0 ? :numerical_symmetrization : :valid
     diagnostic = PoleBinDiagnostic(
         pole_index, block, hermiticity_error, weight, tolerance,
-        [weight], 0.0, :valid,
+        [weight], reconstruction_error, status,
     )
     return (; vectors=[(vector, owner)], diagnostic)
 end
@@ -357,6 +367,24 @@ function _realization_plan(expansion::PoleExpansion, partition::Partition)
     return plan
 end
 
+function _realization_orbital_order(expansion::PoleExpansion, orbital_order)
+    orbital_order !== nothing && return orbital_order
+    hasproperty(expansion.trace, :orbital_order) || return nothing
+    inherited = getproperty(expansion.trace, :orbital_order)
+    inherited === nothing || inherited isa NamedTuple ||
+        throw(ArgumentError("PoleExpansion trace orbital_order must be a NamedTuple"))
+    return inherited
+end
+
+function _canonical_realization_orbital_order(expansion::PoleExpansion,
+                                              orbital_order)
+    names = Tuple(block_names(expansion.poles.partition))
+    orders = Tuple(_resolved_orbital_order(
+        expansion.poles, block, orbital_order,
+    ) for block in names)
+    return NamedTuple{names}(orders)
+end
+
 """
     realize_bath(input, expansion, partition; orbital_order=nothing,
                  atol=0, rtol=sqrt(eps()))
@@ -380,9 +408,16 @@ function realize_bath(input::BathFitInput, expansion::PoleExpansion,
         throw(ArgumentError("PoleExpansion statistics do not match BathFitInput"))
 
     plan = _realization_plan(expansion, partition)
-    attempted = _attempt_factorization(expansion.poles; orbital_order, atol, rtol)
+    requested_order = _realization_orbital_order(expansion, orbital_order)
+    resolved_order = _canonical_realization_orbital_order(
+        expansion, requested_order,
+    )
+    attempted = _attempt_factorization(
+        expansion.poles; orbital_order=resolved_order, atol, rtol,
+    )
     report = PendingBathFitReport(
-        (; kernel=expansion.kernel, expansion_trace=expansion.trace),
+        (; kernel=expansion.kernel, expansion_trace=expansion.trace,
+           realization_orbital_order=resolved_order),
         attempted.diagnostics,
     )
     if attempted.orbitals === nothing

@@ -148,7 +148,6 @@ end
     @test ftps.flavor_order == (:down, :up)
     @test_throws ArgumentError T3NS(layout; flavor_order=[:up, :up])
 
-    @test length(methods(real_pole_bath_fit)) == 0
     @test length(methods(mount_bath)) == 0
     @test length(methods(map_bath)) == 0
     @test length(methods(impurity_topology)) == 0
