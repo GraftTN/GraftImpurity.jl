@@ -52,8 +52,10 @@ function _topology_with_mounted_sites(topology::TreeTopology, bath::DiscreteBath
     return TreeTopology(Graft.Trees.nodeid(topology, topology.root), edges), :extended
 end
 
-function _mount_layout_operators(layout::FlavorLayout)
-    return Dict(site => FermionSiteOperators(layout, site) for site in layout_sites(layout))
+function _mount_layout_operators(layout::FlavorLayout,
+                                 sector::AbstractFermionSector)
+    return Dict(site => FermionSiteOperators(layout, site; sector)
+                for site in layout_sites(layout))
 end
 
 function _mount_phys(layout_operators::AbstractDict{Symbol,<:FermionSiteOperators},
@@ -102,9 +104,42 @@ function _mount_hamiltonian(bath::DiscreteBath,
     return H, retained_couplings
 end
 
+function _opsum_integrity_hash(H::OpSum)
+    state = hash(:GraftImpurityOpSumIntegrity)
+    for term in H.terms
+        state = hash(term.coeff, state)
+        for operator in term.ops
+            state = hash((operator.site, operator.name, operator.charge), state)
+            values = convert(Array, operator.op)
+            state = hash(size(values), state)
+            for value in values
+                state = hash(value, state)
+            end
+        end
+    end
+    return state
+end
+
+function _discrete_bath_integrity_hash(bath::DiscreteBath)
+    orbitals = bath_orbitals(bath)
+    state = hash((:GraftImpurityDiscreteBathIntegrity, bath_layout(bath),
+                  bath_partition(bath), bath_statistics(bath)))
+    for mode in eachindex(orbitals.energies)
+        state = hash(orbitals.energies[mode], state)
+        state = hash(orbitals.pole_indices[mode], state)
+        state = hash(orbitals.block_indices[mode], state)
+        state = hash(orbitals.associated_flavors[mode], state)
+        for value in orbitals.couplings[mode]
+            state = hash(value, state)
+        end
+    end
+    return state
+end
+
 function _mount_diagnostics(user::NamedTuple, topology_source::Symbol,
-                            retained_couplings::Int)
-    required = (; kind=:anderson, topology_source, retained_couplings)
+                            retained_couplings::Int, H::OpSum)
+    required = (; kind=:anderson, topology_source, retained_couplings,
+                hamiltonian_hash=_opsum_integrity_hash(H))
     any(name -> name in keys(required), keys(user)) && throw(ArgumentError(
         "mount diagnostics may not overwrite canonical ownership fields",
     ))
@@ -112,7 +147,8 @@ function _mount_diagnostics(user::NamedTuple, topology_source::Symbol,
 end
 
 """
-    mount_bath(topology, bath::DiscreteBath; site_labels=nothing, diagnostics=(;))
+    mount_bath(topology, bath::DiscreteBath; site_labels=nothing,
+               sector=ParticleNumberSector(), diagnostics=(;))
         -> AndersonBath
 
 Mount a canonical fermionic star bath without changing its one-particle basis.
@@ -127,7 +163,9 @@ convention and therefore are rejected here rather than being interpreted as
 fermionic sites.
 """
 function mount_bath(topology::TreeTopology, bath::DiscreteBath;
-                    site_labels=nothing, diagnostics::NamedTuple=(;))
+                    site_labels=nothing,
+                    sector::AbstractFermionSector=ParticleNumberSector(),
+                    diagnostics::NamedTuple=(;))
     bath_statistics(bath) === :fermion || throw(ArgumentError(
         "mount_bath currently requires a fermionic DiscreteBath; " *
         "construct BosonBath with explicit cutoff/operator data instead",
@@ -148,15 +186,20 @@ function mount_bath(topology::TreeTopology, bath::DiscreteBath;
         ))
     end
 
-    layout_operators = _mount_layout_operators(bath_layout(bath))
-    bath_operators = FermionSiteOperators([:bath_mode])
+    layout_operators = _mount_layout_operators(bath_layout(bath), sector)
+    bath_operators = FermionSiteOperators([:bath_mode]; sector)
     phys = _mount_phys(layout_operators, sites, bath_operators)
     H, retained_couplings = _mount_hamiltonian(
         bath, sites, layout_operators, bath_operators,
     )
-    return AndersonBath(bath, mounted_topology, phys, collect(sites),
-                        collect(anchors), H;
-                        diagnostics=_mount_diagnostics(
-                            diagnostics, topology_source, retained_couplings,
-                        ))
+    certificate = _MountedHamiltonianCertificate(
+        _opsum_integrity_hash(H), _discrete_bath_integrity_hash(bath),
+    )
+    return _certified_anderson_bath(
+        bath, mounted_topology, phys, collect(sites), collect(anchors), H,
+        certificate;
+        diagnostics=_mount_diagnostics(
+            diagnostics, topology_source, retained_couplings, H,
+        ),
+    )
 end

@@ -3,10 +3,16 @@
                  diagnostics=(;))
 
 Concrete mounted fermionic realization. Every canonical bath mode owns exactly
-one mounted site, in the same order as `BathOrbitals`.  anchors are explicit
-declared ownership sites and are never inferred from a largest coupling
-component.
+one mounted site, in the same order as `BathOrbitals`. `owners` freezes the
+declared flavor action at mounting time; it is never inferred later from a
+mutable canonical-bath vector. Anchors are explicit declared ownership sites
+and are never inferred from a largest coupling component.
 """
+struct _MountedHamiltonianCertificate
+    hamiltonian_hash::UInt
+    parametrization_hash::UInt
+end
+
 struct AndersonBath{B<:AbstractHamiltonianBath,P<:NamedTuple,D<:NamedTuple} <:
         AbstractMountedBath
     parametrization::B
@@ -14,16 +20,21 @@ struct AndersonBath{B<:AbstractHamiltonianBath,P<:NamedTuple,D<:NamedTuple} <:
     phys::P
     sites::Tuple{Vararg{Symbol}}
     anchors::Tuple{Vararg{Symbol}}
+    owners::Union{Nothing,Tuple{Vararg{Symbol}}}
     H::OpSum
     diagnostics::D
+    certificate::Union{Nothing,_MountedHamiltonianCertificate}
 
     function AndersonBath(parametrization::B, topology::TreeTopology,
                           phys::P, sites::Tuple{Vararg{Symbol}},
                           anchors::Tuple{Vararg{Symbol}}, H::OpSum,
-                          diagnostics::D, ::Val{:validated}) where {
+                          owners::Union{Nothing,Tuple{Vararg{Symbol}}},
+                          diagnostics::D,
+                          certificate::Union{Nothing,_MountedHamiltonianCertificate},
+                          ::Val{:validated}) where {
                              B<:AbstractHamiltonianBath,P<:NamedTuple,D<:NamedTuple}
-        new{B,P,D}(parametrization, topology, phys, sites, anchors, H,
-                   diagnostics)
+        new{B,P,D}(parametrization, topology, phys, sites, anchors, owners, H,
+                   diagnostics, certificate)
     end
 end
 
@@ -102,10 +113,15 @@ end
 
 _canonical_mounted_anchors(::AbstractHamiltonianBath) = nothing
 
+_canonical_mounted_owners(::AbstractHamiltonianBath) = nothing
+
 function _canonical_mounted_anchors(bath::DiscreteBath)
     return Tuple(physical_site(bath_layout(bath), owner)
                  for owner in bath_orbitals(bath).associated_flavors)
 end
+
+_canonical_mounted_owners(bath::DiscreteBath) =
+    Tuple(bath_orbitals(bath).associated_flavors)
 
 function _mounted_ownership_hash(parametrization::AbstractHamiltonianBath,
                                  topology::TreeTopology,
@@ -153,6 +169,9 @@ function _validated_mounted_fields(parametrization::AbstractHamiltonianBath,
     canonical_anchors === nothing || anchor_tuple == canonical_anchors || throw(ArgumentError(
         "mounted bath anchors must match canonical associated_flavor ownership",
     ))
+    canonical_owners = _canonical_mounted_owners(parametrization)
+    canonical_owners === nothing || length(canonical_owners) == length(site_tuple) ||
+        throw(ArgumentError("mounted bath canonical owners must match its sites"))
     for impurity_site in impurity_sites
         _require_topology_node(topology, impurity_site, "impurity site")
         hasproperty(physical, impurity_site) || throw(ArgumentError(
@@ -179,19 +198,40 @@ function _validated_mounted_fields(parametrization::AbstractHamiltonianBath,
     end
     ownership_hash = _mounted_ownership_hash(parametrization, topology,
                                              site_tuple, anchor_tuple)
-    return (; physical, site_tuple, anchor_tuple, H,
+    return (; physical, site_tuple, anchor_tuple, owner_tuple=canonical_owners, H,
             diagnostics=_mounted_diagnostics(diagnostics, ownership_hash))
+end
+
+function _anderson_bath(parametrization::AbstractHamiltonianBath,
+                        topology::TreeTopology, phys::AbstractDict,
+                        sites::AbstractVector{Symbol}, anchors::AbstractVector{Symbol},
+                        H::OpSum,
+                        certificate::Union{Nothing,_MountedHamiltonianCertificate};
+                        diagnostics::NamedTuple=(;))
+    fields = _validated_mounted_fields(parametrization, topology, phys, sites,
+                                       anchors, H, diagnostics, :fermion)
+    return AndersonBath(parametrization, topology, fields.physical,
+                        fields.site_tuple, fields.anchor_tuple, fields.H,
+                        fields.owner_tuple,
+                        fields.diagnostics, certificate, Val(:validated))
 end
 
 function AndersonBath(parametrization::AbstractHamiltonianBath,
                       topology::TreeTopology, phys::AbstractDict,
                       sites::AbstractVector{Symbol}, anchors::AbstractVector{Symbol},
                       H::OpSum; diagnostics::NamedTuple=(;))
-    fields = _validated_mounted_fields(parametrization, topology, phys, sites,
-                                       anchors, H, diagnostics, :fermion)
-    return AndersonBath(parametrization, topology, fields.physical,
-                        fields.site_tuple, fields.anchor_tuple, fields.H,
-                        fields.diagnostics, Val(:validated))
+    return _anderson_bath(parametrization, topology, phys, sites, anchors, H,
+                          nothing; diagnostics)
+end
+
+function _certified_anderson_bath(parametrization::AbstractHamiltonianBath,
+                                  topology::TreeTopology, phys::AbstractDict,
+                                  sites::AbstractVector{Symbol},
+                                  anchors::AbstractVector{Symbol}, H::OpSum,
+                                  certificate::_MountedHamiltonianCertificate;
+                                  diagnostics::NamedTuple=(;))
+    return _anderson_bath(parametrization, topology, phys, sites, anchors, H,
+                          certificate; diagnostics)
 end
 
 function BosonBath(parametrization::AbstractHamiltonianBath,

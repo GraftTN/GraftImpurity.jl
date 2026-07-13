@@ -152,7 +152,7 @@ end
         junction_collision_bath,
     )
 
-    mounted = mount_bath(t3ns, bath)
+    mounted = mount_bath(t3ns, bath; sector=FermionParitySector())
     @test mounted isa AndersonBath
     @test mounted.topology == t3ns
     @test mounted.sites == expected_bath_sites
@@ -164,7 +164,8 @@ end
                 mounted.H.terms) == 5
     @test all(_is_descendant(mounted.topology, site, anchor)
               for (site, anchor) in zip(mounted.sites, mounted.anchors))
-    changed_mounted = mount_bath(changed, changed_bath)
+    changed_mounted = mount_bath(changed, changed_bath;
+                                 sector=FermionParitySector())
     @test changed_mounted.diagnostics.ownership_hash != mounted.diagnostics.ownership_hash
     wrong_owner_topology = TreeTopology(
         :imp_a,
@@ -187,13 +188,13 @@ end
     @test ttno_from_opsum(mounted.H, mounted.topology, physical_spaces;
                           hermitian=true) isa TTNO
 
-    ftps_mounted = mount_bath(ftps, bath)
+    ftps_mounted = mount_bath(ftps, bath; sector=FermionParitySector())
     @test _opsum_signature(ftps_mounted.H) == _opsum_signature(mounted.H)
     @test ftps_mounted.sites == mounted.sites
     @test ftps_mounted.anchors == mounted.anchors
 
     custom = TreeTopology(:imp_a, [:imp_a => :imp_b, :imp_b => :imp_c])
-    custom_mounted = mount_bath(custom, bath)
+    custom_mounted = mount_bath(custom, bath; sector=FermionParitySector())
     @test custom_mounted.diagnostics.topology_source === :extended
     @test custom_mounted.sites == expected_bath_sites
     @test length(custom_mounted.topology.ids) == length(custom.ids) + length(bath)
@@ -239,8 +240,10 @@ end
     @test Cd_down * C_down ≈ N_down
     @test_throws ArgumentError impurity_topology(T3NS(shared_layout),
                                                  shared_partition, shared_bath)
-    shared_mounted = mount_bath(TreeTopology(:cluster, Pair{Symbol,Symbol}[]),
-                                shared_bath)
+    shared_mounted = mount_bath(
+        TreeTopology(:cluster, Pair{Symbol,Symbol}[]), shared_bath;
+        sector=FermionParitySector(),
+    )
     @test shared_mounted isa AndersonBath
     @test length(shared_mounted.H) == 5
     @test shared_mounted.diagnostics.retained_couplings == 2
@@ -249,16 +252,35 @@ end
         site_labels=[:cluster],
     )
     shared_prebuilt = TreeTopology(:cluster, [:cluster => :shared_bath_site])
-    shared_up_mounted = mount_bath(shared_prebuilt, shared_bath;
-                                   site_labels=[:shared_bath_site])
-    shared_down_mounted = mount_bath(shared_prebuilt, shared_down_bath;
-                                     site_labels=[:shared_bath_site])
+    shared_up_mounted = mount_bath(
+        shared_prebuilt, shared_bath;
+        site_labels=[:shared_bath_site], sector=FermionParitySector(),
+    )
+    shared_down_mounted = mount_bath(
+        shared_prebuilt, shared_down_bath;
+        site_labels=[:shared_bath_site], sector=FermionParitySector(),
+    )
     @test shared_up_mounted.topology == shared_down_mounted.topology
     @test shared_up_mounted.diagnostics.ownership_hash !=
           shared_down_mounted.diagnostics.ownership_hash
     shared_physical = _physical_dict(shared_mounted)
     @test ttno_from_opsum(shared_mounted.H, shared_mounted.topology,
                           shared_physical; hermitian=true) isa TTNO
+
+    u1_local_ops = FermionSiteOperators(
+        shared_layout, :cluster; sector=ParticleNumberSector(),
+    )
+    @test fermion_sector(u1_local_ops) isa ParticleNumberSector
+    @test dim(u1_local_ops.P) == 4
+    @test length(Graft.Backend.sectors(u1_local_ops.P)) == 3
+    u1_mounted = mount_bath(
+        TreeTopology(:cluster, Pair{Symbol,Symbol}[]), shared_bath,
+    )
+    u1_physical = _physical_dict(u1_mounted)
+    @test length(Graft.Backend.sectors(u1_physical[:cluster])) == 3
+    @test length(Graft.Backend.sectors(u1_physical[first(u1_mounted.sites)])) == 2
+    @test ttno_from_opsum(u1_mounted.H, u1_mounted.topology, u1_physical;
+                          hermitian=true) isa TTNO
 
     bosonic = DiscreteBath(shared_layout, shared_partition, shared_orbitals;
                            statistics=:boson)

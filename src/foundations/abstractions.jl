@@ -95,9 +95,10 @@ function impurity_topology end
 
 Lower a typed impurity interaction into Graft symbolic operators.
 
-TODO(M6) — no methods yet.
+M6 provides concrete layout-owned interaction lowering through
+`ImpurityOperators`; later interaction families extend this semantic boundary
+without reviving a bare-`OpSum` solver interface.
 """
-# TODO(M6): interaction lowering is implemented with the solver stack.
 function lower_interaction end
 
 """
@@ -141,9 +142,10 @@ function audit_bathfit end
 
 Audit symmetry from the complete lowered impurity Hamiltonian.
 
-TODO(M6) — no methods yet.
+M6 supplies explicit abelian-generator and non-abelian-unsupported audit
+methods. Candidate generators are typed input; no spin or angular-momentum
+sector is inferred from a flavor label.
 """
-# TODO(M6): full-Hamiltonian symmetry audit belongs with lowering.
 function audit_symmetry end
 
 """
