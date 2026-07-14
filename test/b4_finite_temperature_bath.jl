@@ -28,55 +28,25 @@ using Graft: TreeTopology, nnodes, spin_ops, boson_ops
     @test bath_matsu_0.diagnostics.block_diagnostics[1].relative_residual < 1e-10
 
     T = 0.5
-    beta = inv(T)
-    bose = [inv(expm1(beta * ω)) for ω in bath_real_0.poles]
-    bath_real_T = fit_bath(J, P; T, nmodes=3, ωmin=0.5, ωmax=2.0)
-    @test bath_real_T isa ThermofieldRealPoles
-    @test bath_real_T.statistics == :boson
-    @test bath_real_T.diagnostics.representation == :thermofield_star
-    @test bath_real_T.diagnostics.domain == :real_axis
-    @test bath_real_T.source.poles ≈ bath_real_0.poles
-    @test bath_real_T.source.residues ≈ bath_real_0.residues
-    @test bath_real_T.emission.residues ≈ (bose .+ 1) .* bath_real_0.residues
-    @test bath_real_T.absorption.residues ≈ bose .* bath_real_0.residues
-    @test bath_real_T.emission.residues .- bath_real_T.absorption.residues ≈
-          bath_real_T.source.residues
-    @test bath_real_T.diagnostics.source_reconstruction.relative_residual < 1e-14
-    @test bath_real_T.diagnostics.beta_delta_energy ≈ beta * 0.5
-    @test matsubara_reconstruct(bath_real_T, νs; channel=:source) ≈
-          matsubara_reconstruct(bath_real_0, νs)
-    @test matsubara_reconstruct(bath_real_T, νs; channel=:emission) -
-          matsubara_reconstruct(bath_real_T, νs; channel=:absorption) ≈
-          matsubara_reconstruct(bath_real_T, νs; channel=:source)
-
-    bath_matsu_T = fit_bath((; frequencies=νs, values=Uν), P;
-                            T, domain=:matsubara, nmodes=3,
-                            ωmin=0.5, ωmax=2.0)
-    @test bath_matsu_T isa ThermofieldRealPoles
-    @test bath_matsu_T.diagnostics.domain == :matsubara
-    @test bath_matsu_T.source.poles ≈ exact_poles
-    @test bath_matsu_T.source.residues ≈ exact_residues atol = 1e-10
-    nB = [inv(expm1(beta * ω)) for ω in exact_poles]
-    @test bath_matsu_T.emission.residues ≈ (nB .+ 1) .* exact_residues atol = 1e-10
-    @test bath_matsu_T.absorption.residues ≈ nB .* exact_residues atol = 1e-10
-    @test matsubara_reconstruct(bath_matsu_T, im .* νs; channel=:source) ≈ Uν atol = 1e-10
-    @test bath_matsu_T.source.diagnostics.block_diagnostics[1].relative_residual < 1e-10
-    @test bath_matsu_T.diagnostics.source_reconstruction.relative_residual < 1e-14
+    frozen_result = @test_logs (:warn, r"FROZEN") fit_bath(
+        J, P; T, nmodes=3, ωmin=0.5, ωmax=2.0)
+    @test frozen_result === nothing
+    frozen_matsu_result = @test_logs (:warn, r"FROZEN") fit_bath(
+        (; frequencies=νs, values=Uν), P;
+        T, domain=:matsubara, nmodes=3, ωmin=0.5, ωmax=2.0)
+    @test frozen_matsu_result === nothing
 
     topo = TreeTopology(:imp, Pair{Symbol,Symbol}[])
-    mounted = mount_bath(topo, bath_real_T, P; prefix=:tf)
-    @test length(mounted.emission.sites) == 3
-    @test length(mounted.absorption.sites) == 3
-    @test length(mounted.sites) == 6
-    @test nnodes(mounted.topology) == 7
     @test_throws MethodError mount_bath(topo, ComplexPoles(), P)
     @test_throws ArgumentError fit_bath((; times=[0.0], values=[1.0]), P;
                                         pole_family=:complex, domain=:time_bcf,
                                         nmodes=1, ωmin=0.1, ωmax=1.0)
 
-    @test_throws ArgumentError fit_bath(J, P; kind=:fermion, T,
-                                        nmodes=2, ωmin=0.1, ωmax=1.0)
-    @test_throws ArgumentError BosonBath(J; partition=P, topology=topo,
-                                         matter_ops=spin_ops(), boson_ops=boson_ops(1),
-                                         T, nmodes=2, ωmin=0.5, ωmax=1.5)
+    frozen_fermion_bath = @test_logs (:warn, r"FROZEN") fit_bath(
+        J, P; kind=:fermion, T, nmodes=2, ωmin=0.1, ωmax=1.0)
+    @test frozen_fermion_bath === nothing
+    frozen_boson_bath = @test_logs (:warn, r"FROZEN") BosonBath(
+        J; partition=P, topology=topo, matter_ops=spin_ops(),
+        boson_ops=boson_ops(1), T, nmodes=2, ωmin=0.5, ωmax=1.5)
+    @test frozen_boson_bath === nothing
 end

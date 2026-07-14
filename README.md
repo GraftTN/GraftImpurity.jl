@@ -21,6 +21,14 @@ remain in `Graft.jl`.
 - Experimental scalar and matrix-valued real-axis Lorentzian fits through
   `LorentzianPSD`, `MatrixLorentzianPSD`, and `lorentzian_fit`.
 
+`ThermofieldRealPoles` is a frozen implementation snapshot, not a thermal-state
+solver. Its intended role was to reorganize a purified EDMFT bosonic bath into
+separate emission and absorption branches for tree layout. Complete
+finite-temperature impurity-plus-bath states use Graft's ordinary `Purified`
+route. The public finite-temperature fit/mount entry points currently warn and
+return `nothing`; the disabled snapshot is retained only for possible future
+EDMFT bath-layout studies.
+
 For `fit_bath`, matrix-valued fits use grouped Hermitian PSD residues. Use
 `solver=:psd` (`:sdp` is an alias) for off-diagonal blocks and `solver=:nnls`
 for scalar or diagonal data. In `pes_fit`, `solver=:sdp` enforces Hermitian PSD

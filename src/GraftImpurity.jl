@@ -1,8 +1,10 @@
 """
 GraftImpurity: optional impurity-solver companion package for Graft.jl.
 Owns boson bath fitting/mounting and finite zero-temperature Anderson stars
-lowered from fermionic PSD real-pole fits. Finite-temperature solver glue
-remains a later milestone.
+lowered from fermionic PSD real-pole fits. The thermofield bosonic-bath layout
+experiment is frozen and disabled. It was intended to arrange a purified EDMFT
+boson bath into emission/absorption branches, not to prepare the thermal state;
+complete finite-temperature Hamiltonians use `Graft.Purified`.
 
 Never referenced by any lower layer (§9.10). Owns *no* private geometry code
 (§0.1): geometry builders emit plain `Trees.TreeTopology`.
@@ -85,6 +87,10 @@ function audit_partition end
 # ---------------------------------------------------------------------------
 
 abstract type BathParametrization end
+
+const _ENABLE_THERMOFIELD_BATH = false # Frozen EDMFT bosonic-bath layout experiment.
+const _THERMOFIELD_FROZEN_MESSAGE =
+    "FROZEN: thermofield EDMFT bosonic-bath layout is disabled; use purification for thermal-state preparation; doing nothing"
 
 """
     RealPoles(poles, residues, blocks, block_ranges, diagnostics)
@@ -208,12 +214,25 @@ end
 """
     ThermofieldRealPoles(source, emission, absorption; beta, temperature, diagnostics)
 
-Finite-temperature Hamiltonian bath parametrization for thermofield stars.
+Frozen implementation snapshot for reorganizing a purified EDMFT bosonic bath
+as emission and absorption star branches. This is bath basis/geometry data,
+not a thermal-state preparation method; the complete interacting Hamiltonian
+still follows ordinary purification. While development is frozen, public
+fitting/mounting entry points warn and return `nothing`.
+
 `source` is the real-pole fit to the retarded/Matsubara source object, while
 `emission` and `absorption` are positive real-pole baths with bosonic thermal
 weights `(n_B(ω)+1)` and `n_B(ω)`. The Hamiltonian realization is two stars in a
 vacuum product state; this is deliberately separate from `ComplexPoles` BCF
 pseudomodes.
+
+For a general retarded interaction `U_{ijkl}(τ)`, the compound pair index
+`A=(i,j)` defines a matrix-valued bosonic channel. A Hamiltonian realization
+requires each pole residue `R_p[A,B]` to admit a positive-semidefinite
+factorization `R_p = G_p * G_p'`; thermofield weights then act modewise on the
+columns of `G_p`. They do not simplify the four-index impurity operators. The
+disabled snapshot below implements only scalar `RealPoles`; matrix-residue
+factorization and layout are not implemented.
 """
 struct ThermofieldRealPoles{S<:RealPoles,E<:RealPoles,A<:RealPoles,D<:NamedTuple} <: BathParametrization
     source::S
@@ -341,7 +360,7 @@ struct ComplexPoles <: BathParametrization end
 """
     fit_bath(J, P::Partition; T=0, beta=nothing, kind=:boson, nmodes, ωmin, ωmax,
              grid=:linear, method=:midpoint, solver=:nnls, domain=:real_axis,
-             crossblock=:highmount, pole_family=:real) -> RealPoles | ThermofieldRealPoles
+             crossblock=:highmount, pole_family=:real) -> RealPoles
 
 Blockwise real-pole Hamiltonian-bath fitting for the forwarded boson path.
 `domain=:real_axis` consumes a continuous boson spectral density `J(ω)` and
@@ -362,9 +381,9 @@ data-driven bounded pole-coordinate refinement rather than changing the input
 frequency grid.
 
 * `T = 0`: Δ(iωₙ)/Δ(ω) → real-pole fit per block.
-* `T > 0`, `kind=:boson`: fit the source real poles and split them into
-  thermofield emission/absorption `RealPoles`; the bath initial state is the
-  vacuum product state.
+* `T > 0`: **FROZEN**; warn and return `nothing`. The disabled thermofield
+  split was an EDMFT bosonic-bath layout experiment, not an alternative to
+  purification of the complete interacting Hamiltonian.
 * `crossblock = :highmount | :rotate` (§6.2): high mounting near the tree
   center, or a pre-fit single-particle rotation (returned with results).
 * `pole_family=:complex`: TODO(C3) BCF/Lindbladian fitting. Complex BCF poles
@@ -388,6 +407,11 @@ function fit_bath(J, P::Partition; T::Real=0, kind::Symbol=:boson,
     elseif pole_family != :real
         throw(ArgumentError("fit_bath pole_family must be :real or :complex"))
     end
+    temp = _temperature_spec(T, beta, β)
+    if temp.finite && !_ENABLE_THERMOFIELD_BATH
+        @warn _THERMOFIELD_FROZEN_MESSAGE
+        return nothing
+    end
     kind == :boson ||
         throw(ArgumentError("fit_bath currently implements only kind=:boson; fermionic finite-T Hamiltonian stars need a charged hybridization mounting surface"))
     crossblock in (:highmount, :rotate) ||
@@ -399,8 +423,6 @@ function fit_bath(J, P::Partition; T::Real=0, kind::Symbol=:boson,
     dom = _canonical_domain(domain)
     fitmethod = _canonical_fit_method(method, dom)
     fitsolver = _canonical_solver(solver)
-    temp = _temperature_spec(T, beta, β)
-
     if dom == :real_axis && J isa Function && length(P.blocks) > 1
         probe = first(_pole_midpoints(lo, hi, Int(nmodes), grid))
         J(probe) isa AbstractMatrix &&
@@ -564,12 +586,17 @@ end
 """
     mount_bath(topo, bath::ThermofieldRealPoles, P::Partition; mode=:star, prefix=:bath, attach=nothing)
 
-Mount the emission and absorption thermofield stars as ordinary boson bath
-branches. The return value keeps the two channel mount records separate and
-also exposes concatenated `sites`, `anchors`, and per-block `block_sites`.
+Frozen thermofield bath-layout surface. The disabled implementation mounts
+emission and absorption modes as separate bosonic branches after purification;
+it does not prepare a thermal state. Calls warn and return `nothing` while the
+development switch is disabled.
 """
 function mount_bath(topo::TreeTopology, bath::ThermofieldRealPoles, P::Partition;
                     mode::Symbol=:star, prefix::Symbol=:bath, attach=nothing)
+    if !_ENABLE_THERMOFIELD_BATH
+        @warn _THERMOFIELD_FROZEN_MESSAGE
+        return nothing
+    end
     emission = mount_bath(topo, bath.emission, P;
                           mode, prefix=Symbol(prefix, :em_), attach)
     absorption = mount_bath(emission.topology, bath.absorption, P;
@@ -583,7 +610,10 @@ function mount_bath(topo::TreeTopology, bath::ThermofieldRealPoles, P::Partition
         sites = vcat(emission.sites, absorption.sites),
         anchors = vcat(emission.anchors, absorption.anchors),
         block_sites,
-        channel_sites = (; emission=emission.block_sites, absorption=absorption.block_sites),
+        channel_sites = (;
+            emission=emission.block_sites,
+            absorption=absorption.block_sites,
+        ),
     )
 end
 
@@ -593,9 +623,8 @@ end
 Continuous boson-bath entry point. Fits `J(ω)` with [`fit_bath`](@ref),
 mounts explicit boson sites with [`mount_bath`](@ref), and emits ordinary
 symbolic terms via `boson_modes` and `BosonCoupling` for zero-temperature
-`RealPoles`. Finite-temperature `ThermofieldRealPoles` fitting/mounting is
-available through `fit_bath`/`mount_bath`; lowering the two thermofield coupling
-channels to a single `OpSum` is a later solver-convention step. Returns
+`RealPoles`. The thermofield emission/absorption layout experiment for purified
+EDMFT bosonic baths is **FROZEN**; calls warn and return `nothing`. Returns
 `(; bath, topology, sites, anchors, phys, H)`, where `phys` contains the new
 bath-site physical spaces and `H` is an `OpSum`.
 """
@@ -603,8 +632,7 @@ function BosonBath(J; partition::Partition, topology::TreeTopology, matter_ops,
                    boson_ops, mode::Symbol=:star, density::Symbol=:N,
                    prefix::Symbol=:bath, attach=nothing, kwargs...)
     bath = fit_bath(J, partition; kwargs...)
-    bath isa ThermofieldRealPoles &&
-        throw(ArgumentError("BosonBath finite-T thermofield OpSum lowering is not implemented; use fit_bath/mount_bath for typed thermofield star data"))
+    bath === nothing && return nothing
     bath isa MatrixRealPoles &&
         throw(ArgumentError("BosonBath matrix-residue OpSum lowering is not implemented; use factorize_residues to obtain repeated-energy coupling vectors"))
     mounted = mount_bath(topology, bath, partition; mode, prefix, attach)
