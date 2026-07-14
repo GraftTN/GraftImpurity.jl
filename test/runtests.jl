@@ -10,6 +10,7 @@ const TEST_VERBOSE = lowercase(get(ENV, "GRAFT_TEST_VERBOSE", "false")) in
     include(joinpath(@__DIR__, "interactions_lowering.jl"))
     include(joinpath(@__DIR__, "onebody_symmetry.jl"))
     include(joinpath(@__DIR__, "interaction_ttno.jl"))
+    include(joinpath(@__DIR__, "solver.jl"))
     include(joinpath(@__DIR__, "cayley_mapping.jl"))
     include(joinpath(@__DIR__, "realization.jl"))
     include(joinpath(@__DIR__, "bathfit_report.jl"))

@@ -158,9 +158,9 @@ end
     @test length(methods(audit_symmetry)) == 1
     @test length(methods(realize_quasi_lindblad)) == 0
     @test length(methods(realize_coupled_lindblad)) == 0
-    @test length(methods(set_weiss!)) == 0
-    @test length(methods(set_hybridization!)) == 0
-    @test length(methods(solve!)) == 0
+    @test length(methods(set_weiss!)) == 2
+    @test length(methods(set_hybridization!)) == 2
+    @test length(methods(solve!)) == 1
 
     @test !isdefined(GraftImpurity, :BathParametrization)
     @test !isdefined(GraftImpurity, :RealPoles)

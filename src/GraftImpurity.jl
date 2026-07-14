@@ -10,6 +10,7 @@ module GraftImpurity
 
 using LinearAlgebra: Diagonal, Hermitian, I, diag, eigen, eigvals, norm, opnorm,
     qr, svd, tr
+import LinearAlgebra
 using Graft
 import GreenFunc
 import Optim
@@ -60,7 +61,11 @@ export FlavorLayout, flavors, flavor_index, physical_site, site_modes,
     ChargeU1, FlavorU1, SU2Reduce, SymmetrySpec, SymmetryAuditItem,
     SymmetryAudit, LoweredImpurityHamiltonian, lower_hamiltonian,
     reconstruct_hybridization, audit_bathfit, audit_symmetry,
-    set_weiss!, set_hybridization!, solve!,
+    ZeroTemperature, FiniteTemperature, GroundStateRequest, RealTimeRequest,
+    ImaginaryTimeRequest, ComplexTimeSegment, ComplexTimeRequest,
+    LocalObservable, LocalCorrelator, RawCorrelator, GroundStateResult,
+    ImaginaryTimeResult, SolveRequest, NonMountableImpurityResult,
+    ImpurityResult, Solver, set_weiss!, set_hybridization!, solve!,
     IRCoefficients, fit_ir, evaluate_ir, to_imtime_ir, to_imfreq_ir,
     PESPoleFit, pes_fit, evaluate_poles,
     LorentzianPSD, MatrixLorentzianPSD, lorentzian_fit, spectral_density,
@@ -108,5 +113,8 @@ include(joinpath(@__DIR__, "fitting", "coupling_fit.jl"))
 include(joinpath(@__DIR__, "fitting", "boundary_fit.jl"))
 include(joinpath(@__DIR__, "lorentzian_psd.jl"))
 include(joinpath(@__DIR__, "sparseir_adapter.jl"))
+include(joinpath(@__DIR__, "solver", "types.jl"))
+include(joinpath(@__DIR__, "solver", "requests.jl"))
+include(joinpath(@__DIR__, "solver", "orchestration.jl"))
 
 end # module GraftImpurity

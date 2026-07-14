@@ -149,13 +149,14 @@ sector is inferred from a flavor label.
 function audit_symmetry end
 
 """
-    set_weiss!(solver, G0_iw)
+    set_weiss!(solver, G0_iw; h_loc0)
 
 Set a mutually exclusive Weiss-field input on a stateful impurity solver.
 
-TODO(M6) — no methods yet.
+The implemented M6 Solver conversion requires an explicit layout-owned
+`h_loc0`; a Weiss propagator alone cannot determine a hybridization under an
+arbitrary chemical-potential convention.
 """
-# TODO(M6): state invalidation is implemented by Solver.
 function set_weiss! end
 
 """
@@ -163,20 +164,14 @@ function set_weiss! end
 
 Set a mutually exclusive hybridization-plus-one-body input on a stateful
 impurity solver.
-
-TODO(M6) — no methods yet.
 """
-# TODO(M6): state invalidation is implemented by Solver.
 function set_hybridization! end
 
 """
     solve!(solver, interaction, request; initial_state=nothing)
 
 Execute typed impurity solving and record the result on the solver.
-
-TODO(M6) — no methods yet.
 """
-# TODO(M6): typed requests/results are implemented with Solver.
 function solve! end
 
 """
