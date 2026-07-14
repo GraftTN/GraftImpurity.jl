@@ -83,6 +83,39 @@ function _solver_initial_state(layout; T::Type{<:Number}=ComplexF64)
     )
 end
 
+function _solver_mapped_initial_state(solver::Solver,
+                                      mapping::CayleyTreeKernel)
+    input = solver.input
+    input isa BathFitInput || throw(ArgumentError("mapped Solver fixture needs input"))
+    solver.ops.sector isa ParticleNumberSector || throw(ArgumentError(
+        "mapped Solver fixture requires a particle-number sector",
+    ))
+    expansion = real_pole_bath_fit(input, solver.bath_fit_kernel, solver.gf_struct)
+    discretization = realize_bath(input, expansion, solver.gf_struct)
+    discretization isa DiscretizationResult || throw(ArgumentError(
+        "mapped Solver fixture needs a Hamiltonian-realizable bath",
+    ))
+    mounted = mount_bath(
+        map_bath(mapping, discretization.bath); sector=solver.ops.sector,
+    )
+    vacuum = FermionParity(0) ⊠ U1Irrep(0)
+    one_particle = FermionParity(1) ⊠ U1Irrep(1)
+    names = propertynames(mounted.phys)
+    first_space = getproperty(mounted.phys, first(names))
+    physical = Dict{Symbol,typeof(first_space)}()
+    for site in names
+        physical[site] = getproperty(mounted.phys, site)
+    end
+    sectors = Dict(site => vacuum for site in keys(physical))
+    impurity_site = physical_site(input.layout, first(flavors(input.layout)))
+    sectors[impurity_site] = one_particle
+    state = product_ttns(
+        ComplexF64, mounted.topology, physical,
+        sectors,
+    )
+    return state, mounted
+end
+
 function _solver_value(; kernel=_SolverSyntheticKernel(0.2, 0.16 + 0im),
                        topology_plan=nothing, bath_mapping=nothing)
     layout = _solver_layout()
@@ -421,9 +454,27 @@ end
     )
     mapped_solver, _, _ = _solver_value(bath_mapping=mapping)
     set_hybridization!(mapped_solver, delta; h_loc0=h_loc)
-    @test_throws ArgumentError solve!(
-        mapped_solver, DensityDensityInteraction(zeros(1, 1), layout),
-        SolveRequest(); initial_state=_solver_initial_state(layout),
+    mapped_initial, mapped_mounted = _solver_mapped_initial_state(
+        mapped_solver, mapping,
     )
+    one_particle = FermionParity(1) ⊠ U1Irrep(1)
+    @test collect(Graft.Backend.sectors(Graft.Backend.domain(
+        mapped_initial.tensors[mapped_initial.topo.root],
+    )[1])) == [one_particle]
+    mapped_result = solve!(
+        mapped_solver, DensityDensityInteraction(zeros(1, 1), layout),
+        SolveRequest(; ground_state=GroundStateRequest(
+            trunc=TruncationScheme(maxdim=4), nsweeps=2, krylovdim=4,
+        )); initial_state=mapped_initial,
+    )
+    @test mapped_result isa ImpurityResult
+    @test mapped_result.mounted isa CayleyAndersonBath
+    @test mapped_result.mounted.topology == mapped_mounted.topology
     @test mapped_solver.mapping_result isa CayleyMappingResult
+    @test mapped_solver.mapping_result === mapped_result.mounted.mapping
+    @test collect(Graft.Backend.sectors(Graft.Backend.domain(
+        mapped_result.ground_state.state.tensors[
+            mapped_result.ground_state.state.topo.root,
+        ],
+    )[1])) == [one_particle]
 end

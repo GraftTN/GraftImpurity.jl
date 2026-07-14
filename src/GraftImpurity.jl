@@ -33,7 +33,7 @@ export FlavorLayout, flavors, flavor_index, physical_site, site_modes,
     FermionParitySector, ParticleNumberSector, FermionSiteOperators,
     fermion_sector, local_annihilator, local_creator, local_number, rotate_bath,
     ImpurityOperators, site_operators,
-    AndersonBath, BosonBath,
+    AndersonBath, BosonBath, CayleyAndersonBath,
     AbstractCayleyRoute, ScalarCayley, BlockCayley, AbstractCayleyPartitioner,
     BalancedCayleyPartitioner, EnergySplitCayleyPartitioner,
     CayleyOwnershipGroup, CayleyTreeKernel, AbstractCayleyBath,
@@ -88,11 +88,12 @@ include(joinpath(@__DIR__, "bath", "mounted_baths.jl"))
 include(joinpath(@__DIR__, "topology", "plans.jl"))
 include(joinpath(@__DIR__, "topology", "builders.jl"))
 include(joinpath(@__DIR__, "bath", "mounting.jl"))
-include(joinpath(@__DIR__, "bath", "rotation.jl"))
-include(joinpath(@__DIR__, "interactions", "hamiltonian.jl"))
 include(joinpath(@__DIR__, "mapping", "types.jl"))
 include(joinpath(@__DIR__, "mapping", "scalar.jl"))
 include(joinpath(@__DIR__, "mapping", "block.jl"))
+include(joinpath(@__DIR__, "bath", "cayley_mounting.jl"))
+include(joinpath(@__DIR__, "bath", "rotation.jl"))
+include(joinpath(@__DIR__, "interactions", "hamiltonian.jl"))
 include(joinpath(@__DIR__, "fitting", "nnls.jl"))
 include(joinpath(@__DIR__, "fitting", "input.jl"))
 include(joinpath(@__DIR__, "fitting", "bcf_input.jl"))
@@ -116,5 +117,6 @@ include(joinpath(@__DIR__, "sparseir_adapter.jl"))
 include(joinpath(@__DIR__, "solver", "types.jl"))
 include(joinpath(@__DIR__, "solver", "requests.jl"))
 include(joinpath(@__DIR__, "solver", "orchestration.jl"))
+include(joinpath(@__DIR__, "precompile.jl"))
 
 end # module GraftImpurity

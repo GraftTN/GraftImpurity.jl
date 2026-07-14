@@ -6,7 +6,7 @@ already passed the mandatory abelian exact-rank Graft compression pipeline;
 the uncompressed symbolic `opsum`, symmetry audit, interaction identity, and
 concrete compression report remain available for checkpoint/audit consumers.
 """
-struct LoweredImpurityHamiltonian{M<:AndersonBath,I<:AbstractImpurityInteraction,
+struct LoweredImpurityHamiltonian{M<:AbstractMountedBath,I<:AbstractImpurityInteraction,
                                   H<:OpSum,O<:TTNO,A<:SymmetryAudit,R,D<:NamedTuple}
     mounted::M
     interaction::I
@@ -17,11 +17,19 @@ struct LoweredImpurityHamiltonian{M<:AndersonBath,I<:AbstractImpurityInteraction
     diagnostics::D
 end
 
-function _mounted_physical_spaces(mounted::AndersonBath)
+function _mounted_physical_spaces(mounted::AbstractMountedBath)
     return Dict{Symbol,ElementarySpace}(
         site => getproperty(mounted.phys, site) for site in propertynames(mounted.phys)
     )
 end
+
+_mounted_layout(mounted::AndersonBath) = bath_layout(mounted.parametrization)
+_mounted_layout(mounted::CayleyAndersonBath) = bath_layout(mounted.mapping.mapped)
+
+_mounted_bath_integrity_hash(mounted::AndersonBath) =
+    _discrete_bath_integrity_hash(mounted.parametrization)
+_mounted_bath_integrity_hash(mounted::CayleyAndersonBath) =
+    _cayley_mapping_integrity_hash(mounted.mapping)
 
 function _require_mounted_topology_integrity(topology::TreeTopology)
     count = length(topology.ids)
@@ -77,9 +85,9 @@ function _require_mounted_topology_integrity(topology::TreeTopology)
     return nothing
 end
 
-function _validate_mounted_operator_spaces(mounted::AndersonBath,
+function _validate_mounted_operator_spaces(mounted::Union{AndersonBath,CayleyAndersonBath},
                                            operators::ImpurityOperators)
-    bath_layout(mounted.parametrization) == operators.layout || throw(ArgumentError(
+    _mounted_layout(mounted) == operators.layout || throw(ArgumentError(
         "mounted bath FlavorLayout must match ImpurityOperators.layout",
     ))
     for site in layout_sites(operators.layout)
@@ -118,6 +126,14 @@ function _complete_symmetry_spec(spec::SymmetrySpec, mounted::AndersonBath)
                         bath_owners=expected)
 end
 
+function _complete_symmetry_spec(spec::SymmetrySpec, mounted::CayleyAndersonBath)
+    isempty(spec.bath_owners) || throw(ArgumentError(
+        "Cayley mapped bath sites do not carry inferred flavor-owner actions; " *
+        "request only generators that can be audited from the mapped Hamiltonian",
+    ))
+    return spec
+end
+
 function _require_mounted_hamiltonian_integrity(mounted::AndersonBath)
     certificate = mounted.certificate
     certificate === nothing && throw(ArgumentError(
@@ -134,6 +150,19 @@ function _require_mounted_hamiltonian_integrity(mounted::AndersonBath)
     return nothing
 end
 
+function _require_mounted_hamiltonian_integrity(mounted::CayleyAndersonBath)
+    certificate = mounted.certificate
+    certificate.hamiltonian_hash == _opsum_integrity_hash(mounted.H) ||
+        throw(ArgumentError(
+            "mounted CayleyAndersonBath symbolic Hamiltonian changed after mounting",
+        ))
+    certificate.parametrization_hash == _cayley_mapping_integrity_hash(mounted.mapping) ||
+        throw(ArgumentError(
+            "mounted Cayley mapping data changed after mounting",
+        ))
+    return nothing
+end
+
 function _require_mounted_ownership_integrity(mounted::AndersonBath)
     hasproperty(mounted.diagnostics, :ownership_hash) || throw(ArgumentError(
         "lower_hamiltonian requires a mounted bath ownership integrity certificate",
@@ -146,6 +175,23 @@ function _require_mounted_ownership_integrity(mounted::AndersonBath)
     frozen = _canonical_mounted_owners(mounted.parametrization)
     frozen === mounted.owners || throw(ArgumentError(
         "mounted bath owner actions changed after mounting",
+    ))
+    return nothing
+end
+
+function _require_mounted_ownership_integrity(mounted::CayleyAndersonBath)
+    hasproperty(mounted.diagnostics, :mapping_hash) &&
+        hasproperty(mounted.diagnostics, :ownership_hash) || throw(ArgumentError(
+            "lower_hamiltonian requires a Cayley mapping ownership certificate",
+        ))
+    mapping_hash = _cayley_mapping_integrity_hash(mounted.mapping)
+    mounted.diagnostics.mapping_hash == mapping_hash || throw(ArgumentError(
+        "mounted Cayley mapping provenance changed after mounting",
+    ))
+    expected = _cayley_mounted_ownership_hash(mapping_hash, mounted.topology,
+                                               mounted.sites)
+    mounted.diagnostics.ownership_hash == expected || throw(ArgumentError(
+        "mounted Cayley topology or ownership provenance changed after mounting",
     ))
     return nothing
 end
@@ -168,7 +214,7 @@ function _validate_onebody_layout(onebody::Union{Nothing,ImpurityOneBody},
 end
 
 function _hamiltonian_diagnostics(interaction::AbstractImpurityInteraction,
-                                  mounted::AndersonBath)
+                                  mounted::Union{AndersonBath,CayleyAndersonBath})
     kanamori_terms = interaction isa KanamoriInteraction ? interaction.terms : nothing
     return (
         basis=basis_identity(interaction.layout),
@@ -176,6 +222,23 @@ function _hamiltonian_diagnostics(interaction::AbstractImpurityInteraction,
         kanamori_terms,
         ownership_hash=mounted.diagnostics.ownership_hash,
     )
+end
+
+function _validate_lowerable_bath(mounted::AndersonBath)
+    mounted.parametrization isa DiscreteBath || throw(ArgumentError(
+        "lower_hamiltonian requires an AndersonBath from canonical DiscreteBath data",
+    ))
+    bath_statistics(mounted.parametrization) === :fermion || throw(ArgumentError(
+        "lower_hamiltonian currently supports fermionic AndersonBath values only",
+    ))
+    return nothing
+end
+
+function _validate_lowerable_bath(mounted::CayleyAndersonBath)
+    bath_statistics(mounted.mapping.mapped) === :fermion || throw(ArgumentError(
+        "lower_hamiltonian currently supports fermionic Cayley mapped baths only",
+    ))
+    return nothing
 end
 
 function _nonempty_hamiltonian_opsum(H::OpSum, operators::ImpurityOperators)
@@ -196,7 +259,7 @@ are Hermitian, audit requested full-Hamiltonian symmetries, construct a Graft
 TTNO, and unconditionally invoke core sector-aware exact-rank compression.
 No interaction-only compression or dense fallback is exposed.
 """
-function lower_hamiltonian(mounted::AndersonBath,
+function lower_hamiltonian(mounted::Union{AndersonBath,CayleyAndersonBath},
                            interaction::AbstractImpurityInteraction,
                            operators::ImpurityOperators;
                            h_loc::Union{Nothing,ImpurityOneBody}=nothing,
@@ -204,12 +267,7 @@ function lower_hamiltonian(mounted::AndersonBath,
                            symmetry::SymmetrySpec=SymmetrySpec(interaction.layout),
                            compression_atol::Real,
                            scheme::TruncationScheme=TruncationScheme())
-    mounted.parametrization isa DiscreteBath || throw(ArgumentError(
-        "lower_hamiltonian currently requires an AndersonBath from canonical DiscreteBath data",
-    ))
-    bath_statistics(mounted.parametrization) === :fermion || throw(ArgumentError(
-        "lower_hamiltonian currently supports fermionic AndersonBath values only",
-    ))
+    _validate_lowerable_bath(mounted)
     interaction.layout == operators.layout || throw(ArgumentError(
         "interaction FlavorLayout must match ImpurityOperators.layout",
     ))

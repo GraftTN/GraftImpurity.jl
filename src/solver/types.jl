@@ -541,7 +541,7 @@ observables, and each raw contour-labelled correlator category distinct.
 """
 struct ImpurityResult{SI<:BathFitInput,I<:BathFitInput,E<:PoleExpansion,
                       D<:DiscretizationResult,
-                      M<:AndersonBath,H<:LoweredImpurityHamiltonian,
+                      M<:AbstractMountedBath,H<:LoweredImpurityHamiltonian,
                       G<:GroundStateResult,O<:NamedTuple,R<:NamedTuple,
                       IT<:Union{Nothing,ImaginaryTimeResult},C<:NamedTuple,
                       A<:BathFitAudit,Q<:SolveRequest} <:
@@ -572,7 +572,7 @@ struct ImpurityResult{SI<:BathFitInput,I<:BathFitInput,E<:PoleExpansion,
                             complex_time::C, request::Q, warm_identity::UInt,
                             ::Val{:validated}) where {
                                 SI<:BathFitInput,I<:BathFitInput,E<:PoleExpansion,
-                                D<:DiscretizationResult,M<:AndersonBath,
+                                D<:DiscretizationResult,M<:AbstractMountedBath,
                                 H<:LoweredImpurityHamiltonian,G<:GroundStateResult,
                                 O<:NamedTuple,R<:NamedTuple,
                                 IT<:Union{Nothing,ImaginaryTimeResult},C<:NamedTuple,
@@ -588,7 +588,7 @@ end
 function ImpurityResult(source_input::BathFitInput, input_kind::Symbol,
                         h_loc0::ImpurityOneBody, input::BathFitInput,
                         expansion::PoleExpansion, discretization::DiscretizationResult,
-                        bathfit_audit::BathFitAudit, mounted::AndersonBath,
+                        bathfit_audit::BathFitAudit, mounted::AbstractMountedBath,
                         lowered::LoweredImpurityHamiltonian,
                         ground_state::GroundStateResult, energy::Real,
                         observables::NamedTuple, real_time::NamedTuple,
@@ -644,7 +644,7 @@ mutable struct Solver{L<:FlavorLayout,P<:Partition,K<:AbstractRealPoleBathFitKer
     expansion::Union{Nothing,PoleExpansion}
     discretization::Union{Nothing,DiscretizationResult,NonMountablePoleFit}
     mapping_result::Union{Nothing,CayleyMappingResult}
-    mounted::Union{Nothing,AndersonBath}
+    mounted::Union{Nothing,AbstractMountedBath}
     interaction::Union{Nothing,AbstractImpurityInteraction}
     lowered::Union{Nothing,LoweredImpurityHamiltonian}
     bathfit_audit::Union{Nothing,BathFitAudit}

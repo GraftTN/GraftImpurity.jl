@@ -2,6 +2,7 @@ using Test
 using LinearAlgebra: Diagonal, Hermitian, I, eigen, eigvals, norm
 using Graft
 using GraftImpurity
+using Graft.TestUtils: to_dense
 
 function _cayley_delta(coupling::AbstractMatrix{<:Number},
                        bath_hamiltonian::AbstractMatrix{<:Number}, z::Complex)
@@ -104,6 +105,164 @@ function _fock_onebody_hamiltonian(onebody::AbstractMatrix{<:Number})
     return hamiltonian, annihilators
 end
 
+function _cayley_mapped_site_widths(mapped::ScalarCayleyBath)
+    return fill(1, length(mapped.sites))
+end
+
+function _cayley_mapped_site_widths(mapped::BlockCayleyBath)
+    return copy(mapped.site_dimensions)
+end
+
+function _particle_number_fock_states(width::Int)
+    states = collect(0:((1 << width) - 1))
+    sort!(states; by=state -> (count_ones(state), state))
+    return states
+end
+
+"Exact mounted TTNO action matrix; no raw TTNO contraction."
+function _mounted_ttno_action_columns(mounted::CayleyAndersonBath, operator)
+    operator.topo == mounted.topology || throw(ArgumentError(
+        "mounted action oracle received an operator on a different topology",
+    ))
+    # Graft.TestUtils.to_dense(::TTNO) enumerates product states and evaluates
+    # categorical `inner(bra, apply(O, ket))` entries. These dedicated 8/16
+    # state fixtures keep that exact small-system oracle bounded.
+    return to_dense(operator)
+end
+
+function _test_cayley_topology_extension(mounted::CayleyAndersonBath)
+    source = mounted.mapping.mapped.topology
+    target = mounted.topology
+    source_count = Graft.Trees.nnodes(source)
+    source_root = Graft.Trees.nodeid(source, source.root)
+    @test Graft.Trees.nodeid(target, target.root) == source_root
+    @test target.ids[1:source_count] == source.ids
+    for source_node in 1:source_count
+        source_children = Symbol[
+            Graft.Trees.nodeid(source, child)
+            for child in source.children[source_node]
+        ]
+        target_node = Graft.Trees.nodeindex(
+            target, Graft.Trees.nodeid(source, source_node),
+        )
+        target_children = Symbol[
+            Graft.Trees.nodeid(target, child)
+            for child in target.children[target_node]
+        ]
+        @test target_children[1:length(source_children)] == source_children
+        if source.parent[source_node] == 0
+            @test target.parent[target_node] == 0
+        else
+            @test Graft.Trees.nodeid(target, target.parent[target_node]) ==
+                  Graft.Trees.nodeid(source, source.parent[source_node])
+        end
+    end
+    for impurity_site in layout_sites(bath_layout(mounted.mapping.mapped))
+        impurity_node = Graft.Trees.nodeindex(target, impurity_site)
+        @test Graft.Trees.nodeid(target, target.parent[impurity_node]) == source_root
+    end
+    return nothing
+end
+
+function _mounted_raw_operator(mounted::CayleyAndersonBath,
+                               lowered::LoweredImpurityHamiltonian)
+    physical = Dict{Symbol,Graft.Backend.ElementarySpace}(
+        site => getproperty(mounted.phys, site)
+        for site in propertynames(mounted.phys)
+    )
+    return ttno_from_opsum(
+        lowered.opsum, mounted.topology, physical; hermitian=true,
+    )
+end
+
+"""
+Independent mapped Fock-Hamiltonian reference in `to_dense`'s mounted-site
+basis. It reads the mapped matrices and impurity one-body data only; in
+particular it does not inspect the mounted `OpSum` or its TTNO.
+"""
+function _mapped_fock_in_mounted_basis(mounted::CayleyAndersonBath,
+                                        impurity_onebody::AbstractMatrix{<:Number})
+    mapped = mounted.mapping.mapped
+    layout = mapped.canonical.layout
+    flavor_count = length(flavors(layout))
+    size(impurity_onebody) == (flavor_count, flavor_count) || throw(DimensionMismatch(
+        "impurity one-body matrix must span the mapped FlavorLayout",
+    ))
+    mapped_widths = _cayley_mapped_site_widths(mapped)
+    sum(mapped_widths) == length(mapped) || throw(DimensionMismatch(
+        "mapped site widths must cover every transformed bath mode",
+    ))
+
+    mapped_onebody = vcat(
+        hcat(Matrix{ComplexF64}(impurity_onebody), mapped.coupling_matrix),
+        hcat(adjoint(mapped.coupling_matrix), mapped.bath_hamiltonian),
+    )
+    source_keys = Tuple{Symbol,Symbol,Int}[]
+    for flavor in flavors(layout)
+        push!(source_keys, (
+            physical_site(layout, flavor), :impurity, flavor_index(layout, flavor),
+        ))
+    end
+    for (site, width) in zip(mapped.sites, mapped_widths)
+        for local_index in 1:width
+            push!(source_keys, (site, :bath, local_index))
+        end
+    end
+    source_index = Dict{Tuple{Symbol,Symbol,Int},Int}(
+        key => index for (index, key) in enumerate(source_keys)
+    )
+
+    mounted_keys = Tuple{Symbol,Symbol,Int}[]
+    mounted_widths = Int[]
+    impurity_sites = layout_sites(layout)
+    for site in mounted.topology.ids
+        hasproperty(mounted.phys, site) || continue
+        if site in impurity_sites
+            modes = site_modes(layout, site)
+            push!(mounted_widths, length(modes))
+            for flavor in modes
+                push!(mounted_keys, (
+                    site, :impurity, flavor_index(layout, flavor),
+                ))
+            end
+        else
+            mapped_index = findfirst(==(site), mapped.sites)
+            mapped_index === nothing && throw(ArgumentError(
+                "mounted topology contains a physical site absent from the mapping",
+            ))
+            width = mapped_widths[mapped_index]
+            push!(mounted_widths, width)
+            for local_index in 1:width
+                push!(mounted_keys, (site, :bath, local_index))
+            end
+        end
+    end
+    length(mounted_keys) == length(source_keys) &&
+        allunique(mounted_keys) &&
+        all(key -> haskey(source_index, key), mounted_keys) || throw(ArgumentError(
+            "mounted physical modes do not match the mapped Fock reference",
+        ))
+    mode_permutation = Int[source_index[key] for key in mounted_keys]
+    fock_hamiltonian, _ = _fock_onebody_hamiltonian(
+        mapped_onebody[mode_permutation, mode_permutation],
+    )
+
+    # `to_dense` enumerates physical sites in internal topology order and each
+    # ParticleNumberSector local Fock basis by particle number then bit pattern.
+    local_orders = [_particle_number_fock_states(width) for width in mounted_widths]
+    dense_to_fock = Int[]
+    for local_states in Iterators.product(local_orders...)
+        global_state = 0
+        offset = 0
+        for (local_state, width) in zip(local_states, mounted_widths)
+            global_state |= local_state << offset
+            offset += width
+        end
+        push!(dense_to_fock, global_state + 1)
+    end
+    return fock_hamiltonian[dense_to_fock, dense_to_fock]
+end
+
 @testset "M5 scalar Cayley bath mapping" begin
     bath = _scalar_cayley_fixture()
     canonical_energies = copy(bath.orbitals.energies)
@@ -148,6 +307,16 @@ end
                                     Graft.Trees.nodeindex(result.mapped.topology, edge.parent)) <= 2
               for edge in result.mapped.edges)
 
+    source_topology = deepcopy(result.mapped.topology)
+    mounted = mount_bath(result; sector=ParticleNumberSector())
+    @test result.mapped.topology == source_topology
+    @test mounted isa CayleyAndersonBath
+    @test mounted.mapping === result
+    _test_cayley_topology_extension(mounted)
+    @test all(site -> hasproperty(mounted.phys, site),
+              (:impurity, result.mapped.sites...))
+    @test mounted.diagnostics.mapping_kind === :scalar
+    @test mounted.diagnostics.mapping_approximate === false
     split = map_bath(
         _scalar_kernel(length(bath);
                        partitioner=EnergySplitCayleyPartitioner(0.0)), bath,
@@ -156,6 +325,70 @@ end
     @test !split.report.tree_connected
     @test split.report.virtual_hub
     @test split.report.hybridization_error < 1e-10
+    # Small full-action fixtures keep the action oracle within the host's
+    # focused-test budget while exercising both connected and split mappings.
+    action_bath = _scalar_cayley_fixture(
+        energies=[-0.65, 0.45], couplings=ComplexF64[0.31 + 0.08im, -0.19im],
+    )
+    action_operators = ImpurityOperators(
+        action_bath.layout; sector=ParticleNumberSector(),
+    )
+    action_result = map_bath(_scalar_kernel(length(action_bath)), action_bath)
+    action_source_topology = deepcopy(action_result.mapped.topology)
+    action_mounted = mount_bath(action_result; sector=ParticleNumberSector())
+    @test action_result.mapped.topology == action_source_topology
+    _test_cayley_topology_extension(action_mounted)
+    action_lowered = lower_hamiltonian(
+        action_mounted, DensityDensityInteraction(zeros(1, 1), action_bath.layout),
+        action_operators; compression_atol=1e-12,
+    )
+    @test action_lowered.mounted === action_mounted
+    @test only(action_lowered.audit.abelian).status === :preserved
+    @test action_lowered.compression.mode === :exact_rank
+    action_expected = _mapped_fock_in_mounted_basis(
+        action_mounted, zeros(ComplexF64, 1, 1),
+    )
+    action_raw = _mounted_ttno_action_columns(
+        action_mounted, _mounted_raw_operator(action_mounted, action_lowered),
+    )
+    action_compressed = _mounted_ttno_action_columns(
+        action_mounted, action_lowered.operator,
+    )
+    @test action_raw ≈ action_expected atol=1e-10
+    @test action_compressed ≈ action_expected atol=1e-10
+    @test action_compressed ≈ action_raw atol=1e-12
+
+    action_split = map_bath(
+        _scalar_kernel(
+            length(action_bath); partitioner=EnergySplitCayleyPartitioner(0.0),
+        ), action_bath,
+    )
+    @test action_split.report.virtual_hub
+    split_source_topology = deepcopy(action_split.mapped.topology)
+    action_split_mounted = mount_bath(action_split; sector=ParticleNumberSector())
+    @test action_split.mapped.topology == split_source_topology
+    _test_cayley_topology_extension(action_split_mounted)
+    @test Graft.Trees.nodeid(action_split_mounted.topology,
+                             action_split_mounted.topology.root) === :cayley_hub
+    @test !hasproperty(action_split_mounted.phys, :cayley_hub)
+    action_split_lowered = lower_hamiltonian(
+        action_split_mounted,
+        DensityDensityInteraction(zeros(1, 1), action_bath.layout),
+        action_operators; compression_atol=1e-12,
+    )
+    split_expected = _mapped_fock_in_mounted_basis(
+        action_split_mounted, zeros(ComplexF64, 1, 1),
+    )
+    split_raw = _mounted_ttno_action_columns(
+        action_split_mounted,
+        _mounted_raw_operator(action_split_mounted, action_split_lowered),
+    )
+    split_compressed = _mounted_ttno_action_columns(
+        action_split_mounted, action_split_lowered.operator,
+    )
+    @test split_raw ≈ split_expected atol=1e-10
+    @test split_compressed ≈ split_expected atol=1e-10
+    @test split_compressed ≈ split_raw atol=1e-12
 
     degenerate = _scalar_cayley_fixture(
         energies=[0.5, 0.5], couplings=ComplexF64[0.3 + 0.2im, -0.1im],
@@ -166,6 +399,13 @@ end
     @test !dark.report.tree_connected
     @test dark.report.virtual_hub
     @test isempty(dark.mapped.edges)
+    dark_source_topology = deepcopy(dark.mapped.topology)
+    dark_mounted = mount_bath(dark; sector=ParticleNumberSector())
+    @test dark.mapped.topology == dark_source_topology
+    _test_cayley_topology_extension(dark_mounted)
+    @test Graft.Trees.nodeid(dark_mounted.topology,
+                             dark_mounted.topology.root) === :cayley_hub
+    @test !hasproperty(dark_mounted.phys, :cayley_hub)
 
     # A physical edge below the user audit tolerance remains in the topology;
     # only machine-scale roundoff is classified as a dark component.
@@ -204,6 +444,31 @@ end
     @test norm(diagonal_result.transform[[1, 3], 3:4]) < 1e-12
     @test norm(diagonal_result.transform[[2, 4], 1:2]) < 1e-12
     @test diagonal_result.report.hybridization_error < 1e-10
+
+    shared_layout = FlavorLayout(
+        [:up, :down], Dict(:up => :cluster, :down => :cluster),
+        Dict(:cluster => [:up, :down]); basis=:shared_scalar_cayley,
+    )
+    shared_partition = Partition(:spin => [:up, :down])
+    shared_orbitals = BathOrbitals(
+        [-0.7, 0.6], [ComplexF64[0.3, 0.0], ComplexF64[0.0, 0.25]],
+        [1, 2], [1, 1], [:up, :down];
+        layout=shared_layout, partition=shared_partition,
+    )
+    shared_bath = DiscreteBath(
+        shared_layout, shared_partition, shared_orbitals; statistics=:fermion,
+    )
+    shared_kernel = CayleyTreeKernel(
+        ScalarCayley(), [
+            CayleyOwnershipGroup(:up_tree, [1], [:up]),
+            CayleyOwnershipGroup(:down_tree, [2], [:down]),
+        ],
+    )
+    shared_result = map_bath(shared_kernel, shared_bath)
+    @test shared_result.report.virtual_hub
+    @test_throws ArgumentError mount_bath(
+        shared_result; sector=ParticleNumberSector(),
+    )
 
     matrix_partition = Partition(:spin => [:up, :down])
     matrix_orbitals = BathOrbitals(
@@ -309,7 +574,17 @@ end
     )
     @test_throws MethodError mount_bath(result.mapped.topology, result.mapped)
 
+    block_mount_error = try
+        mount_bath(result; sector=ParticleNumberSector())
+        nothing
+    catch err
+        err
+    end
+    @test block_mount_error isa ArgumentError
+    @test occursin("one fermionic mode per physical site",
+                   sprint(showerror, block_mount_error))
     impurity_onebody = ComplexF64[-0.55 0.04im; -0.04im 0.15]
+
     canonical_onebody = vcat(
         hcat(impurity_onebody, GraftImpurity._cayley_coupling_matrix(bath)),
         hcat(adjoint(GraftImpurity._cayley_coupling_matrix(bath)),
@@ -337,6 +612,7 @@ end
     @test length(split.mapped.roots) == 2
     @test split.report.virtual_hub
     @test split.report.root_coupling_residual < 1e-10
+    @test_throws ArgumentError mount_bath(split; sector=ParticleNumberSector())
 
     rank_one = _block_cayley_fixture(
         energies=[-0.9, 0.2, 0.8],

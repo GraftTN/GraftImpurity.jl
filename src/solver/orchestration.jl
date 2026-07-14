@@ -328,30 +328,29 @@ function _solver_bathfit_audit(report::BathFitReport, request::SolveRequest)
     )
 end
 
-function _solver_topology!(solver::Solver, bath::DiscreteBath)
+function _solver_mount_bath!(solver::Solver, bath::DiscreteBath)
     if solver.bath_mapping !== nothing
         mapped = map_bath(solver.bath_mapping, bath)
         solver.mapping_result = mapped
-        throw(ArgumentError(
-            "CayleyTreeKernel mapping produced $(typeof(mapped.mapped)), which is " *
-            "intentionally non-mountable through the canonical star-bath Solver " *
-            "path; no diagonal-star fallback is available",
-        ))
+        return mount_bath(mapped; sector=solver.ops.sector)
     end
     plan = solver.topology_plan
     if plan isa Union{T3NS,FTPS}
-        return impurity_topology(plan, solver.gf_struct, bath)
+        return mount_bath(
+            impurity_topology(plan, solver.gf_struct, bath), bath;
+            sector=solver.ops.sector,
+        )
     end
     plan isa TreeTopology || throw(ArgumentError(
         "Solver has no mountable topology plan",
     ))
-    return plan
+    return mount_bath(plan, bath; sector=solver.ops.sector)
 end
 
 function _solver_warm_identity(solver::Solver,
                                interaction::AbstractImpurityInteraction,
-                               mounted::AndersonBath)
-    bath_hash = _discrete_bath_integrity_hash(mounted.parametrization)
+                               mounted::AbstractMountedBath)
+    bath_hash = _mounted_bath_integrity_hash(mounted)
     return hash((:GraftImpuritySolverWarmStart, solver.layout, solver.gf_struct,
                  mounted.topology, mounted.diagnostics.ownership_hash, bath_hash,
                  interaction, solver.h_loc0, solver.soc, solver.symmetry,
@@ -527,8 +526,11 @@ end
 
 Run the explicit lifecycle `fit -> realize -> topology/mount -> lower -> DMRG
 -> requested correlators`. A non-mountable real-pole fit returns a typed
-`NonMountableImpurityResult`; a Cayley mapping rejects explicitly because M5's
-mapped bath values are not canonical Hamiltonian-mountable sites.
+`NonMountableImpurityResult`. An explicit Cayley mapping mounts the retained
+transformed bath Hamiltonian and compatible mapping topology when every
+physical site carries one fermionic mode; multi-mode physical carriers reject
+explicitly at mounting. The Solver never falls back to a canonical diagonal
+star.
 """
 function solve!(solver::Solver, interaction::AbstractImpurityInteraction,
                 request::SolveRequest; initial_state=nothing)
@@ -560,8 +562,7 @@ function solve!(solver::Solver, interaction::AbstractImpurityInteraction,
     end
 
     audit = _solver_bathfit_audit(discretization.report, request)
-    topology = _solver_topology!(solver, discretization.bath)
-    mounted = mount_bath(topology, discretization.bath; sector=solver.ops.sector)
+    mounted = _solver_mount_bath!(solver, discretization.bath)
     lowered = lower_hamiltonian(
         mounted, interaction, solver.ops;
         h_loc=h_loc0, soc=solver.soc, symmetry=solver.symmetry,

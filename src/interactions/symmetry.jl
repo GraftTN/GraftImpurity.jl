@@ -183,6 +183,12 @@ function _siteop_delta(operator::SiteOp,
         return _generator_weight(candidate, Symbol(encoded[length("Cd_") + 1:end]))
     elseif startswith(encoded, "C_")
         return -_generator_weight(candidate, Symbol(encoded[length("C_") + 1:end]))
+    elseif startswith(encoded, "cayley_Cd_")
+        return candidate isa ChargeU1 ? 1.0 : nothing
+    elseif startswith(encoded, "cayley_C_")
+        return candidate isa ChargeU1 ? -1.0 : nothing
+    elseif startswith(encoded, "cayley_bilinear_")
+        return candidate isa ChargeU1 ? 0.0 : nothing
     elseif encoded == "Cd" || encoded == "C"
         owner = _bath_owner(spec, operator.site)
         owner === nothing && return candidate isa ChargeU1 ?
