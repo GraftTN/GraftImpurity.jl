@@ -22,9 +22,9 @@ const BATH_RNG = Xoshiro(20260709)
     @test bath.residues ≈ 0.2 .* bath.poles .* 0.5
     @test couplings(bath) ≈ sqrt.(bath.residues)
     @test bath.diagnostics.block_diagnostics[1].rel_weight_change < 0.2
-    bathT = fit_bath(J, P; T=1.0, nmodes=2, ωmin=0.1, ωmax=1.0)
-    @test bathT isa ThermofieldRealPoles
-    @test bathT.diagnostics.representation == :thermofield_star
+    frozen_bath = @test_logs (:warn, r"FROZEN") fit_bath(
+        J, P; T=1.0, nmodes=2, ωmin=0.1, ωmax=1.0)
+    @test frozen_bath === nothing
 
     νs = [0.0, 0.4, 1.0, 2.0, 4.0, 8.0]
     exact_poles = [0.75, 1.25, 1.75]

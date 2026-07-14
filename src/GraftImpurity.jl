@@ -5,6 +5,10 @@ Graft.jl.
 This package owns impurity-specific basis identity, named hybridization
 partitions, bath fitting/realization, topology planning, interaction lowering,
 and solver orchestration. Graft remains dependency-free of this package.
+
+Thermofield transformations belong only to EDMFT bosonic-bath chain mapping
+and layout; they are not a finite-temperature state-preparation contract.
+Finite-temperature solver requests use Graft's purification machinery.
 """
 module GraftImpurity
 
