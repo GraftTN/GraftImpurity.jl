@@ -32,6 +32,47 @@ function _coupling_expansion_value(expansion::PoleExpansion, block_index_value::
     return value
 end
 
+@testset "reference-style real-component BFGS bath fit" begin
+    layout = _coupling_layout([:orbital_1, :orbital_2]; basis=:reference_bfgs)
+    partition = Partition(:bath => [:orbital_1, :orbital_2])
+    frequencies = collect(0.2:0.2:3.0)
+    reference_energies = [-0.6, 0.35]
+    reference_couplings = Vector{ComplexF64}[
+        ComplexF64[0.7, 0.2],
+        ComplexF64[0.15, 0.55],
+    ]
+    samples = _coupling_samples(
+        reference_energies, reference_couplings, frequencies,
+    )
+    input = BathFitInput(
+        layout, frequencies, :bath => samples;
+        domain=:matsubara, statistics=:fermion,
+    )
+    kernel = CouplingFitKernel(
+        n_modes=2, alpha=0.0, components=RealComponents(),
+        energy_bounds=(-1.0, 1.0), maxiter=2_000,
+        optimizer_tolerance=1e-9, fit_tolerance=1e-5,
+    )
+
+    expansion = real_pole_bath_fit(input, kernel, partition)
+    fit = only(expansion.trace.fits)
+
+    @test expansion.kernel === :coupling_fit
+    @test fit.selected_modes == 2
+    @test fit.alpha == 0.0
+    @test fit.components isa RealComponents
+    @test fit.energy_bounds == (-1.0, 1.0)
+    @test all(energy -> -1.0 <= energy <= 1.0, fit.energies)
+    @test all(coupling -> all(iszero, imag.(coupling)), fit.couplings)
+    @test all(isapprox(residue, coupling * coupling'; atol=1e-12)
+              for (residue, coupling) in zip(expansion.poles.residues, fit.couplings))
+    @test all(minimum(eigvals(Hermitian(residue))) >= -1e-12
+              for residue in expansion.poles.residues)
+    @test fit.error.relative_l2 < 1e-5
+    @test maximum(norm(_coupling_expansion_value(expansion, 1, frequency) .- target)
+                  for (frequency, target) in zip(frequencies, samples)) < 1e-4
+end
+
 @testset "direct coupling-space Matsubara fitting" begin
     layout = _coupling_layout([:up, :down]; basis=:coupling_matrix)
     partition = Partition(:spin => [:up, :down])

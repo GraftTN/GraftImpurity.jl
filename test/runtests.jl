@@ -17,6 +17,7 @@ const TEST_VERBOSE = lowercase(get(ENV, "GRAFT_TEST_VERBOSE", "false")) in
     include(joinpath(@__DIR__, "real_pole_kernels.jl"))
     include(joinpath(@__DIR__, "complex_poles.jl"))
     include(joinpath(@__DIR__, "coupling_fit.jl"))
+    include(joinpath(@__DIR__, "esprit_tau.jl"))
     include(joinpath(@__DIR__, "pes_pole_fitting.jl"))
     include(joinpath(@__DIR__, "lorentzian_psd.jl"))
     include(joinpath(@__DIR__, "sparseir_adapter.jl"))

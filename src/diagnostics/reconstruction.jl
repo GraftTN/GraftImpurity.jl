@@ -8,11 +8,12 @@ GreenFunc inputs carry their component in source metadata.
 function _bathfit_component(input::BathFitInput)
     component = hasproperty(input.metadata, :component) ?
                 getproperty(input.metadata, :component) :
-                (input.domain === :matsubara ? :matsubara : :spectral)
+                (input.domain in (:matsubara, :imaginary_time) ?
+                 :matsubara : :spectral)
     component isa Symbol || throw(ArgumentError("BathFitInput component must be a Symbol"))
-    if input.domain === :matsubara
+    if input.domain in (:matsubara, :imaginary_time)
         component === :matsubara || throw(ArgumentError(
-            "a Matsubara BathFitInput must use component=:matsubara",
+            "an imaginary-axis BathFitInput must use component=:matsubara",
         ))
     else
         component in (:spectral, :retarded) || throw(ArgumentError(
@@ -23,11 +24,11 @@ function _bathfit_component(input::BathFitInput)
 end
 
 function _reconstruction_broadening(input::BathFitInput, broadening)
-    if input.domain === :matsubara
+    if input.domain in (:matsubara, :imaginary_time)
         broadening === nothing && return nothing
         value = Float64(broadening)
         isfinite(value) && iszero(value) || throw(ArgumentError(
-            "Matsubara reconstruction does not accept nonzero broadening",
+            "imaginary-axis reconstruction does not accept nonzero broadening",
         ))
         return nothing
     end
@@ -70,11 +71,50 @@ function _bathfit_block_value(bath::DiscreteBath, block_index_value::Int,
     return value
 end
 
+function _bathfit_imaginary_time_factor(tau::Float64, beta::Float64,
+                                         energy::Float64)
+    if energy >= 0
+        return exp(-tau * energy) / (1 + exp(-beta * energy))
+    end
+    return exp((beta - tau) * energy) / (1 + exp(beta * energy))
+end
+
+function _bathfit_imaginary_time_block_value(bath::DiscreteBath,
+                                              block_index_value::Int,
+                                              tau::Float64,
+                                              beta::Float64)
+    bath.statistics === :fermion || throw(ArgumentError(
+        "imaginary-time bath reconstruction currently supports only fermionic baths",
+    ))
+    dimension = length(block_flavors(
+        bath.partition, block_names(bath.partition)[block_index_value],
+    ))
+    value = zeros(ComplexF64, dimension, dimension)
+    for mode_index in eachindex(bath.orbitals.energies)
+        bath.orbitals.block_indices[mode_index] == block_index_value || continue
+        energy = bath.orbitals.energies[mode_index]
+        coupling = bath.orbitals.couplings[mode_index]
+        factor = _bathfit_imaginary_time_factor(tau, beta, energy)
+        value .-= factor .* (coupling * coupling')
+    end
+    return value
+end
+
 function _bathfit_reconstruction_value(bath::DiscreteBath,
                                        block_index_value::Int,
                                        frequency::Float64,
+                                       domain::Symbol,
                                        component::Symbol,
-                                       broadening::Union{Nothing,Float64})
+                                       broadening::Union{Nothing,Float64},
+                                       beta::Union{Nothing,Float64})
+    if domain === :imaginary_time
+        beta === nothing && throw(ArgumentError(
+            "imaginary-time reconstruction requires beta from the tau grid",
+        ))
+        return _bathfit_imaginary_time_block_value(
+            bath, block_index_value, frequency, beta,
+        )
+    end
     if component === :matsubara
         return _bathfit_block_value(bath, block_index_value, im * frequency)
     end
@@ -160,12 +200,15 @@ function _reconstruct_bathfit_input(bath::DiscreteBath, input::BathFitInput;
     _validate_fit_input(input, bath.partition)
     component = _bathfit_component(input)
     eta = _reconstruction_broadening(input, broadening)
+    beta = input.domain === :imaginary_time ?
+           _bathfit_imaginary_time_beta(input.frequencies) : nothing
     names = block_names(bath.partition)
     samples = Tuple(begin
         block_index_value = block_index(bath.partition, block)
         Matrix{ComplexF64}[
             _bathfit_reconstruction_value(
-                bath, block_index_value, frequency, component, eta,
+                bath, block_index_value, frequency, input.domain, component,
+                eta, beta,
             ) for frequency in input.frequencies
         ]
     end for block in names)
@@ -228,10 +271,13 @@ function _reconstruct_greenfunc_block(bath::DiscreteBath,
         ))
     component = _bathfit_component(input)
     eta = _reconstruction_broadening(input, broadening)
+    beta = input.domain === :imaginary_time ?
+           _bathfit_imaginary_time_beta(input.frequencies) : nothing
     block_index_value = block_index(bath.partition, resolved_block)
     reconstructed = Matrix{ComplexF64}[
         _bathfit_reconstruction_value(
-            bath, block_index_value, frequency, component, eta,
+            bath, block_index_value, frequency, input.domain, component,
+            eta, beta,
         ) for frequency in input.frequencies
     ]
     return _reconstructed_greenfunc(template, reconstructed)
@@ -264,4 +310,103 @@ function reconstruct_hybridization(bath::DiscreteBath,
     input = BathFitInput(bath.layout, template)
     reconstructed = _reconstruct_bathfit_input(bath, input; broadening)
     return reconstructed.source_template::GreenFunc.BlockGf
+end
+
+function _validate_residual_inputs(source::BathFitInput,
+                                   reconstruction::BathFitInput)
+    source.layout == reconstruction.layout || throw(ArgumentError(
+        "residual hybridization inputs must use the same FlavorLayout",
+    ))
+    source.domain === reconstruction.domain || throw(ArgumentError(
+        "residual hybridization inputs must use the same domain",
+    ))
+    source.statistics === reconstruction.statistics || throw(ArgumentError(
+        "residual hybridization inputs must use the same statistics",
+    ))
+    source.frequencies == reconstruction.frequencies || throw(ArgumentError(
+        "residual hybridization inputs must use the same frequency values and order",
+    ))
+    names = Tuple(keys(source.blocks))
+    names == Tuple(keys(reconstruction.blocks)) || throw(ArgumentError(
+        "residual hybridization inputs must use the same block names and order",
+    ))
+    source.target_labels == reconstruction.target_labels || throw(ArgumentError(
+        "residual hybridization inputs must use the same target labels",
+    ))
+    for name in names
+        source_samples = getproperty(source.blocks, name)
+        reconstruction_samples = getproperty(reconstruction.blocks, name)
+        length(source_samples) == length(source.frequencies) || throw(DimensionMismatch(
+            "source block $name does not match its frequency grid",
+        ))
+        length(reconstruction_samples) == length(source.frequencies) ||
+            throw(DimensionMismatch(
+                "reconstruction block $name does not match the source frequency grid",
+            ))
+        for (index, (source_sample, reconstruction_sample)) in enumerate(
+                zip(source_samples, reconstruction_samples))
+            size(source_sample) == size(reconstruction_sample) ||
+                throw(DimensionMismatch(
+                    "residual hybridization block $name sample $index has mismatched shapes",
+                ))
+        end
+    end
+    return names
+end
+
+"""
+    residual_hybridization(source::BathFitInput,
+                           reconstruction::BathFitInput)
+
+Compute the signed residual `source - reconstruction` without changing the
+source layout, domain, statistics, frequency or block order, target labels, or
+metadata. A GreenFunc-backed source retains an equally typed residual template
+with the source mesh and semantic metadata.
+"""
+function residual_hybridization(source::BathFitInput,
+                                reconstruction::BathFitInput)
+    names = _validate_residual_inputs(source, reconstruction)
+    blocks = NamedTuple{names}(Tuple(
+        Matrix{ComplexF64}[
+            source_sample - reconstruction_sample
+            for (source_sample, reconstruction_sample) in zip(
+                getproperty(source.blocks, name),
+                getproperty(reconstruction.blocks, name),
+            )
+        ] for name in names
+    ))
+    template = _reconstructed_template(source, blocks)
+    return BathFitInput(
+        source.layout, source.domain, source.statistics,
+        copy(source.frequencies), blocks, source.target_labels,
+        source.metadata, template, Val(:validated),
+    )
+end
+
+"""
+    residual_hybridization(source::BathFitInput, bath::DiscreteBath;
+                           broadening=nothing)
+
+Reconstruct `bath` on the source grid, then return the signed residual
+`source - reconstruction`. Real-axis sources require the same explicit
+positive broadening as [`reconstruct_hybridization`](@ref).
+"""
+function residual_hybridization(source::BathFitInput, bath::DiscreteBath;
+                                broadening=nothing)
+    reconstruction = reconstruct_hybridization(bath, source; broadening)
+    return residual_hybridization(source, reconstruction)
+end
+
+"""
+    residual_hybridization(report::BathFitReport)
+
+Return the signed source-minus-reconstruction input stored by a bath-fit
+report. Reports without a reconstruction fail explicitly.
+"""
+function residual_hybridization(report::BathFitReport)
+    reconstruction = report.reconstruction
+    reconstruction === nothing && throw(ArgumentError(
+        "BathFitReport has no reconstruction for residual_hybridization",
+    ))
+    return residual_hybridization(report.source, reconstruction)
 end

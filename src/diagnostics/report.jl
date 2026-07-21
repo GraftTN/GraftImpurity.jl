@@ -17,9 +17,8 @@ end
 
 function _bathfit_report_broadening(input::BathFitInput,
                                     expansion::PoleExpansion, broadening)
-    input.domain === :matsubara && return _reconstruction_broadening(
-        input, broadening,
-    )
+    input.domain in (:matsubara, :imaginary_time) &&
+        return _reconstruction_broadening(input, broadening)
     candidate = broadening
     if candidate === nothing
         candidate = _bathfit_trace_broadening(expansion)
@@ -33,7 +32,7 @@ function _validate_realization_broadening(input::BathFitInput,
     broadening !== nothing && return _bathfit_report_broadening(
         input, expansion, broadening,
     )
-    input.domain === :matsubara && return nothing
+    input.domain in (:matsubara, :imaginary_time) && return nothing
     _bathfit_trace_broadening(expansion) === nothing && return nothing
     return _bathfit_report_broadening(input, expansion, nothing)
 end
@@ -243,7 +242,8 @@ function _bathfit_report(expansion::PoleExpansion, input::BathFitInput,
             "the raw pole expansion is not Hamiltonian-mountable; no bath reconstruction exists",
         ))
     else
-        can_reconstruct = input.domain === :matsubara || eta !== nothing
+        can_reconstruct = input.domain in (:matsubara, :imaginary_time) ||
+                          eta !== nothing
         if can_reconstruct
             started = time_ns()
             reconstruction = reconstruct_hybridization(bath, input; broadening=eta)

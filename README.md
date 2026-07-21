@@ -1,11 +1,15 @@
 # GraftImpurity.jl
 
-Optional impurity-solver companion package for
+Impurity-solver companion package for
 [Graft.jl](https://github.com/GraftTN/Graft.jl). `GraftImpurity.jl` owns impurity
 partitions, bath fitting and mounting, solver-facing interfaces, and
-postprocessing of correlators and Green's functions; the tensor-network kernels
-remain in `Graft.jl`.
+postprocessing of correlators and Green's functions; the tree tensor-network kernels is in `Graft.jl`.
 
+The core of GraftImpurity.jl contains three types of features:
+
+1. Various bath fitting algorithms from published/verified and experimental methods to fit the hybridization function of fermions and bosons. Whereas the kernel constructions are independent but share common optimisation algorithms. In the future, Lindblad/HEOM-type complex weight+complex pole modes and/or Lorentzian type modes may be extended, subject to the availability of TTNDO features from Graft.jl, i.e., my personal effort toward the TTNDO.
+2. Mapping the effective Hamiltonian through constructing the tree tensor network operator; for T3NS (MT3N) and FTPS, we use star geometry. In the case of Cayley tree or in other cases, star geometry to chain geometry mapping is applied.
+3. Providing the post-processing of Green's functions which may be required for DMFT calculations, such as linear predictor and PSD projection through Lorentzian.
 ## Features
 
 - Hamiltonian bath fitting, realization, and mounting with `Partition`,
@@ -34,6 +38,26 @@ the distance to the PSD cone without changing the fit, and `bath_orbitals`
 rejects materially indefinite residues. PES fits may contain positive and
 negative real poles and are distinct from the typed `BlockRealPoles`
 Hamiltonian-bath representation.
+
+The BFGS branch in the `green-jl-counterterms` reference code belongs to the
+same direct coupling-fit model and objective family as `CouplingFitKernel`; it
+is not an extension of `ESPRITTauKernel`, which is the imaginary-time
+ESPRIT route. A corresponding unweighted real-coupling configuration is:
+
+```julia
+CouplingFitKernel(
+    n_modes=N,
+    alpha=0.0,
+    components=RealComponents(),
+    energy_bounds=(emin, emax),
+)
+```
+
+This mapping is not a literal port. The reference implementation initializes
+randomly and uses `lambda_range` only to initialize energies, leaving them
+unconstrained afterwards. `CouplingFitKernel` instead uses deterministic moment
+initialization, and `energy_bounds` is a true closed feasible interval enforced
+throughout the fit.
 
 The Lorentzian interface accepts real-axis nonnegative or Hermitian PSD data
 only. It is experimental and makes no convergence or uniqueness guarantee.

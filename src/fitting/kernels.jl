@@ -233,6 +233,58 @@ function MiniPoleKernel(; n_poles::Integer,
     return MiniPoleKernel(count, tolerance, scale, retained, fit, Val(:validated))
 end
 
+"""
+    ESPRITTauKernel(; n_poles, pole_tolerance=sqrt(eps()),
+                    projection_tolerance=1e-12,
+                    fit_tolerance=nothing)
+
+Imaginary-time matrix-ESPRIT finite-bath fitter. It independently fits each
+named fermionic hybridization block and returns an ordinary `PoleExpansion`.
+This imaginary-time ESPRIT route is not an extension point for the
+`green-jl-counterterms` reference BFGS branch; that branch belongs to the
+direct coupling-fit family represented by
+`CouplingFitKernel`. `pole_tolerance` is the relative fail-closed tolerance for
+the imaginary part of an ESPRIT pole energy. `projection_tolerance` controls
+the explicit per-pole PSD positive-part projection, and `fit_tolerance`, when
+provided, is a hard relative-L2 gate applied after that physical projection.
+"""
+struct ESPRITTauKernel <: AbstractRealPoleBathFitKernel
+    n_poles::Int
+    pole_tolerance::Float64
+    projection_tolerance::Float64
+    fit_tolerance::Union{Nothing,Float64}
+
+    function ESPRITTauKernel(n_poles::Int, pole_tolerance::Float64,
+                             projection_tolerance::Float64,
+                             fit_tolerance::Union{Nothing,Float64},
+                             ::Val{:validated})
+        new(n_poles, pole_tolerance, projection_tolerance, fit_tolerance)
+    end
+end
+
+function ESPRITTauKernel(; n_poles::Integer,
+                         pole_tolerance::Real=sqrt(eps(Float64)),
+                         projection_tolerance::Real=1e-12,
+                         fit_tolerance::Union{Nothing,Real}=nothing)
+    count = Int(n_poles)
+    count > 0 || throw(ArgumentError(
+        "ESPRITTauKernel n_poles must be positive",
+    ))
+    pole = Float64(pole_tolerance)
+    isfinite(pole) && pole > 0 || throw(ArgumentError(
+        "ESPRITTauKernel pole_tolerance must be finite and positive",
+    ))
+    projection = Float64(projection_tolerance)
+    isfinite(projection) && projection > 0 || throw(ArgumentError(
+        "ESPRITTauKernel projection_tolerance must be finite and positive",
+    ))
+    fit = fit_tolerance === nothing ? nothing : Float64(fit_tolerance)
+    fit === nothing || (isfinite(fit) && fit > 0) || throw(ArgumentError(
+        "ESPRITTauKernel fit_tolerance must be finite and positive",
+    ))
+    return ESPRITTauKernel(count, pole, projection, fit, Val(:validated))
+end
+
 """Allocation policy for the signs of direct-fit bath energies."""
 abstract type AbstractCouplingModeAllocation end
 
@@ -357,6 +409,15 @@ fitted or tied named block's relative reconstruction threshold a hard
 input-domain acceptance gate. Declared energy bounds are closed: each feasible
 declared endpoint is refined in its coupling components and retained only when
 it strictly improves the weighted objective; the trace records every snap.
+
+The `green-jl-counterterms` reference BFGS branch maps to the same direct
+coupling model and objective family through, for example,
+`CouplingFitKernel(n_modes=N, alpha=0.0, components=RealComponents(),
+energy_bounds=(emin, emax))`; it is not a variant of `ESPRITTauKernel`.
+This is not a literal port: the reference implementation initializes randomly
+and uses `lambda_range` only to initialize energies, which are unconstrained
+thereafter. This kernel instead uses deterministic moment initialization and
+treats `energy_bounds` as a true closed feasible interval throughout the fit.
 """
 struct CouplingFitKernel{A<:AbstractCouplingModeAllocation,
                          C<:AbstractCouplingComponents,T<:Tuple} <:

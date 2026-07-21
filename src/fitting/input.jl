@@ -2,7 +2,9 @@
     BathFitInput(layout, frequencies, blocks...; domain, statistics, metadata=(;))
 
 Validated, layout-bearing input to a real-pole bath-fit kernel. `blocks` are
-named scalar or square-matrix samples indexed by the common frequency grid.
+named scalar or square-matrix samples indexed by the common sampling grid;
+`frequencies` stores that grid for compatibility and therefore contains
+imaginary times when `domain=:imaginary_time`.
 The input owns no algorithm state: it records only the caller's basis token,
 source samples, and source metadata needed to preserve the named block
 contract through fitting and realization.
@@ -80,8 +82,9 @@ function BathFitInput(layout::FlavorLayout,
                       domain::Symbol,
                       statistics::Symbol,
                       metadata::NamedTuple=(;))
-    domain in (:real_axis, :matsubara) ||
-        throw(ArgumentError("BathFitInput domain must be :real_axis or :matsubara"))
+    domain in (:real_axis, :matsubara, :imaginary_time) || throw(ArgumentError(
+        "BathFitInput domain must be :real_axis, :matsubara, or :imaginary_time",
+    ))
     statistics in (:fermion, :boson) ||
         throw(ArgumentError("BathFitInput statistics must be :fermion or :boson"))
     isempty(frequencies) && throw(ArgumentError("BathFitInput needs frequencies"))
@@ -90,6 +93,7 @@ function BathFitInput(layout::FlavorLayout,
         throw(ArgumentError("BathFitInput frequencies must be finite"))
     allunique(values) ||
         throw(ArgumentError("BathFitInput frequencies must be distinct"))
+    domain === :imaginary_time && _bathfit_imaginary_time_beta(values)
     isempty(blocks) && throw(ArgumentError("BathFitInput needs named blocks"))
     names = Symbol[first(block) for block in blocks]
     allunique(names) || throw(ArgumentError("BathFitInput block names must be unique"))
@@ -101,6 +105,24 @@ function BathFitInput(layout::FlavorLayout,
                         metadata, nothing, Val(:validated))
 end
 
+function _bathfit_imaginary_time_beta(taus::Vector{Float64})
+    isempty(taus) && throw(ArgumentError(
+        "imaginary-time bath-fit input needs a nonempty tau grid",
+    ))
+    iszero(first(taus)) || throw(ArgumentError(
+        "imaginary-time bath-fit tau grid must start at 0",
+    ))
+    beta = last(taus)
+    beta > 0 || throw(ArgumentError(
+        "imaginary-time bath-fit tau grid must end at beta > 0",
+    ))
+    all(index -> taus[index] < taus[index + 1], firstindex(taus):lastindex(taus)-1) ||
+        throw(ArgumentError(
+            "imaginary-time bath-fit tau grid must be strictly increasing",
+        ))
+    return beta
+end
+
 function _greenfunc_domain(gf::GreenFunc.Gf)
     length(gf.mesh) == 1 ||
         throw(ArgumentError("bath fitting supports one physical frequency mesh"))
@@ -109,6 +131,16 @@ function _greenfunc_domain(gf::GreenFunc.Gf)
         gf.component === :matsubara ||
             throw(ArgumentError("an ImFreq bath-fit input needs component=:matsubara"))
         return :matsubara
+    elseif mesh isa GreenFunc.ImTime
+        gf.component === :matsubara || throw(ArgumentError(
+            "an ImTime bath-fit input needs component=:matsubara",
+        ))
+        beta = _bathfit_imaginary_time_beta(_greenfunc_frequency_values(mesh))
+        isapprox(beta, Float64(mesh.β); rtol=sqrt(eps(Float64)), atol=0.0) ||
+            throw(ArgumentError(
+                "an ImTime bath-fit grid must end at its declared inverse temperature",
+            ))
+        return :imaginary_time
     elseif mesh isa GreenFunc.ReFreq
         gf.component in (:spectral, :retarded) ||
             throw(ArgumentError(
@@ -116,7 +148,9 @@ function _greenfunc_domain(gf::GreenFunc.Gf)
             ))
         return :real_axis
     end
-    throw(ArgumentError("bath fitting supports ImFreq and ReFreq GreenFunc meshes"))
+    throw(ArgumentError(
+        "bath fitting supports ImFreq, ImTime, and ReFreq GreenFunc meshes",
+    ))
 end
 
 function _greenfunc_samples(gf::GreenFunc.Gf)
@@ -139,8 +173,8 @@ end
 
 # GreenFunc.ImFreq exposes physical real Matsubara frequencies through indexed
 # access while its iterable element declaration follows the stored integer grid.
-# Indexed extraction therefore preserves data order without relying on
-# `collect(mesh)`'s element-type allocation path.
+# Indexed extraction preserves data order for every supported mesh without
+# relying on `collect(mesh)`'s element-type allocation path.
 _greenfunc_frequency_values(mesh) = Float64[mesh[index] for index in eachindex(mesh)]
 
 _copy_greenfunc_template(gf::GreenFunc.Gf) = copy(gf)

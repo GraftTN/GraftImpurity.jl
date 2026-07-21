@@ -51,7 +51,8 @@ export FlavorLayout, flavors, flavor_index, physical_site, site_modes,
     BathFitCriteria, BathFitAuditItem, BathFitAudit,
     DiscretizationResult, NonMountablePoleFit,
     QuadratureKernel, BoundaryFitKernel, PESKernel, MiniPoleKernel,
-    CouplingFitKernel, CouplingBlockTie, FreeModeAllocation, SignedModeAllocation,
+    CouplingFitKernel, ESPRITTauKernel, CouplingBlockTie,
+    FreeModeAllocation, SignedModeAllocation,
     ComplexComponents, RealComponents, EqualTie, ConjugateTie,
     real_pole_bath_fit, fit_complex_bcf, evaluate_bcf,
     realize_bath, mount_bath, map_bath, realize_quasi_lindblad,
@@ -64,7 +65,8 @@ export FlavorLayout, flavors, flavor_index, physical_site, site_modes,
     rotate_one_body, rotate_interaction,
     ChargeU1, FlavorU1, SU2Reduce, SymmetrySpec, SymmetryAuditItem,
     SymmetryAudit, LoweredImpurityHamiltonian, lower_hamiltonian,
-    reconstruct_hybridization, audit_bathfit, audit_symmetry,
+    reconstruct_hybridization, residual_hybridization, audit_bathfit,
+    audit_symmetry,
     ZeroTemperature, FiniteTemperature, GroundStateRequest, RealTimeRequest,
     ImaginaryTimeRequest, ComplexTimeSegment, ComplexTimeRequest,
     LocalObservable, LocalCorrelator, RawCorrelator, GroundStateResult,
@@ -113,6 +115,7 @@ include(joinpath(@__DIR__, "pes_pole_fitting.jl"))
 include(joinpath(@__DIR__, "fitting", "pes_kernel.jl"))
 include(joinpath(@__DIR__, "fitting", "minipole_engine.jl"))
 include(joinpath(@__DIR__, "fitting", "minipole.jl"))
+include(joinpath(@__DIR__, "fitting", "esprit_tau.jl"))
 include(joinpath(@__DIR__, "fitting", "complex_bcf.jl"))
 include(joinpath(@__DIR__, "fitting", "coupling_fit.jl"))
 include(joinpath(@__DIR__, "fitting", "boundary_fit.jl"))
