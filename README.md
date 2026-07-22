@@ -56,61 +56,123 @@ Pkg.develop(path="../GreenFunc.jl")
 Pkg.test()
 ```
 
-## References
+## Algorithmic References and Provenance
 
-Background for bath discretization, impurity topologies, and solver design:
+References are grouped by the GraftImpurity functionality they inform. Each
+entry identifies its relation to the package; citing a method does not imply
+that every solver or physical setting in the paper is implemented.
 
-- C. Gramsch, K. Balzer, M. Eckstein, and M. Kollar, *Hamiltonian-based
-  impurity solver for nonequilibrium dynamical mean-field theory*,
-  [Phys. Rev. B 88, 235106 (2013)](https://doi.org/10.1103/PhysRevB.88.235106).
-  Matrix-valued Hamiltonian-bath discretization.
-- D. Bauernfeind, M. Zingl, R. Triebl, M. Aichhorn, and H. G. Evertz,
-  *Fork Tensor-Product States: Efficient Multiorbital Real-Time DMFT Solver*,
-  [Phys. Rev. X 7, 031013 (2017)](https://doi.org/10.1103/PhysRevX.7.031013).
-  FTPS geometry, star-bath discretization, and residue-factorization convention.
-- K. Gunst, F. Verstraete, S. Wouters, Ö. Legeza, and D. Van Neck,
-  *T3NS: Three-Legged Tree Tensor Network States*,
-  [J. Chem. Theory Comput. 14, 2026 (2018)](https://doi.org/10.1021/acs.jctc.8b00098).
-  Three-legged tree representation.
-- N.-O. Linden, M. Zingl, C. Hubig, O. Parcollet, and U. Schollwöck,
-  *Imaginary-time matrix product state impurity solver in a real material
-  calculation: Spin-orbit coupling in Sr₂RuO₄*,
-  [Phys. Rev. B 101, 041101(R) (2020)](https://doi.org/10.1103/PhysRevB.101.041101).
-  Matrix-valued hybridization and spin-orbit-coupled block structure.
-- H. Schnait, D. Bauernfeind, T. Saha-Dasgupta, and M. Aichhorn,
-  *Small moments without long-range magnetic ordering in the zero-temperature
-  ground state of the double-perovskite iridate Ba₂YIrO₆*,
-  [Phys. Rev. B 106, 035132 (2022)](https://doi.org/10.1103/PhysRevB.106.035132)
-  ([arXiv:2202.10794](https://arxiv.org/abs/2202.10794)). Off-diagonal and
-  spin-orbit-coupled hybridization in fork geometries.
-- M. Grundner, P. Westhoff, F. B. Kugler, O. Parcollet, and U. Schollwöck,
-  *Complex time evolution in tensor networks and time-dependent Green's
-  functions*,
-  [Phys. Rev. B 109, 155124 (2024)](https://doi.org/10.1103/PhysRevB.109.155124).
-  Complex-time evolution for Green-function calculations.
-- X. Cao, E. M. Stoudenmire, and O. Parcollet, *Finite temperature minimal
-  entangled typical thermal states impurity solver*,
-  [Phys. Rev. B 109, 245113 (2024)](https://doi.org/10.1103/PhysRevB.109.245113)
-  ([arXiv:2312.13668](https://arxiv.org/abs/2312.13668)). Direct coupling-space
-  Matsubara bath fitting and METTS.
-- S. Paeckel, *Spectral decomposition and high-accuracy Greens functions:
-  Overcoming the Nyquist-Shannon limit via complex-time Krylov expansion*,
-  [arXiv:2411.09680](https://arxiv.org/abs/2411.09680). Complex-time Krylov
-  augmentation of real-time correlators.
-- B. Zhan, J.-L. Chen, Z. Fan, and T. Xiang, *Tree tensor network impurity
-  solver based on Cayley-tree mapping*,
-  [Phys. Rev. B 113, 195144 (2026)](https://doi.org/10.1103/ycty-d5f9).
-  Cayley-tree mapping for scalar-hybridization bath Hamiltonians.
+### Bath Discretization and Impurity Geometries
 
-Related theses:
+1. **Matrix-valued Hamiltonian bath** — *implemented; algorithmic basis*
 
-- D. Bauernfeind, *Fork Tensor Product States: Efficient Multi-Orbital
-  Impurity Solver for Dynamical Mean Field Theory*, PhD thesis, Graz
-  University of Technology (2018). Detailed FTPS construction.
-- S. Mardazad, *Simulating real molecules with tensor network techniques*, PhD
-  thesis, LMU Munich (2022). T3N framework.
-- M. Grundner, *Tensor Network Impurity Solvers: Simulating Quantum Materials*,
-  PhD thesis, LMU Munich (2025). T3N, FT3N, and MT3N impurity topologies.
+   C. Gramsch, K. Balzer, M. Eckstein, and M. Kollar, “Hamiltonian-based impurity solver for nonequilibrium dynamical mean-field theory,” *Physical Review B* **88**, 235106 (2013).
+   [DOI](https://doi.org/10.1103/PhysRevB.88.235106)
+
+   **Provenance:** Basis for matrix-valued Hamiltonian-bath discretization.
+
+2. **FTPS geometry** — *implemented; algorithmic basis*
+
+   D. Bauernfeind, M. Zingl, R. Triebl, M. Aichhorn, and H. G. Evertz, “Fork Tensor-Product States: Efficient Multiorbital Real-Time DMFT Solver,” *Physical Review X* **7**, 031013 (2017).
+   [DOI](https://doi.org/10.1103/PhysRevX.7.031013)
+
+   **Provenance:** Basis for FTPS geometry, star-bath discretization, and the residue-factorization convention.
+
+3. **T3NS geometry** — *implemented; algorithmic basis*
+
+   K. Gunst, F. Verstraete, S. Wouters, Ö. Legeza, and D. Van Neck, “T3NS: Three-Legged Tree Tensor Network States,” *Journal of Chemical Theory and Computation* **14**, 2026 (2018).
+   [DOI](https://doi.org/10.1021/acs.jctc.8b00098)
+
+   **Provenance:** Basis for the three-legged tree representation.
+
+4. **Cayley-tree bath mapping** — *implemented; algorithmic basis*
+
+   B. Zhan, J.-L. Chen, Z. Fan, and T. Xiang, “Tree tensor network impurity solver based on Cayley-tree mapping,” *Physical Review B* **113**, 195144 (2026).
+   [DOI](https://doi.org/10.1103/ycty-d5f9)
+
+   **Provenance:** Basis for scalar Cayley-tree mapping; GraftImpurity extends the realization to number-conserving block baths.
+
+### Spin-Orbit Coupling and Matrix Structure
+
+1. **SOC-aware block hybridization** — *implemented; validation reference*
+
+   N.-O. Linden, M. Zingl, C. Hubig, O. Parcollet, and U. Schollwöck, “Imaginary-time matrix product state impurity solver in a real material calculation: Spin-orbit coupling in Sr₂RuO₄,” *Physical Review B* **101**, 041101(R) (2020).
+   [DOI](https://doi.org/10.1103/PhysRevB.101.041101)
+
+   **Provenance:** Reference for matrix-valued hybridization and spin-orbit-coupled block structure.
+
+2. **SOC hybridization in fork geometries** — *validation reference*
+
+   H. Schnait, D. Bauernfeind, T. Saha-Dasgupta, and M. Aichhorn, “Small moments without long-range magnetic ordering in the zero-temperature ground state of the double-perovskite iridate Ba₂YIrO₆,” *Physical Review B* **106**, 035132 (2022).
+   [DOI](https://doi.org/10.1103/PhysRevB.106.035132) ·
+   [arXiv](https://arxiv.org/abs/2202.10794)
+
+   **Provenance:** Reference for off-diagonal, spin-orbit-coupled hybridization in fork geometries.
+
+3. **SOC Hamiltonian in TTNS/TTNO** — *implemented; validation reference*
+
+   X. Cao, Y. Lu, P. Hansmann, and M. W. Haverkort, “Tree tensor-network real-time multiorbital impurity solver: Spin-orbit coupling and correlation functions in Sr₂RuO₄,” *Physical Review B* **104**, 115119 (2021).
+   [DOI](https://doi.org/10.1103/PhysRevB.104.115119) ·
+   [arXiv](https://arxiv.org/abs/2103.05545)
+
+   **Provenance:** Validation reference for representing spin-orbit-coupled multiorbital impurity Hamiltonians and their dynamics with TTNS/TTNO.
+
+### Time Evolution, Bath Fitting, and Thermal Methods
+
+1. **Complex-time Green functions** — *design reference*
+
+   M. Grundner, P. Westhoff, F. B. Kugler, O. Parcollet, and U. Schollwöck, “Complex time evolution in tensor networks and time-dependent Green's functions,” *Physical Review B* **109**, 155124 (2024).
+   [DOI](https://doi.org/10.1103/PhysRevB.109.155124)
+
+   **Provenance:** Design reference for complex-time evolution in Green-function calculations.
+
+2. **Direct coupling-space bath fitting**
+
+   X. Cao, E. M. Stoudenmire, and O. Parcollet, “Finite temperature minimal entangled typical thermal states impurity solver,” *Physical Review B* **109**, 245113 (2024).
+   [DOI](https://doi.org/10.1103/PhysRevB.109.245113) ·
+   [arXiv](https://arxiv.org/abs/2312.13668)
+
+   **Provenance:** Basis for direct coupling-space Matsubara bath fitting.
+
+3. **ESPRIT imaginary-time bath fitting** — *implemented; validation reference*
+
+   Y. Yu, G. Harsha, L. Zhang, A. Jażdżewska, D. Zgid, X. Dong, and E. Gull, “Hybrid Hamiltonian-diagrammatic quantum impurity solver,” arXiv:2606.11095
+   (2026).
+   [arXiv](https://arxiv.org/abs/2606.11095) ·
+   [Supplement](https://arxiv.org/src/2606.11095v1/anc/supplement.pdf)
+
+   **Provenance:** Matrix-valued imaginary-time ESPRIT construction.
+
+   **Note:** We only use this bath fitting method, we still solve the Hamiltonian not hybrid.
+
+4. **Complex-time Krylov augmentation** — *design reference*
+
+   S. Paeckel, “Spectral decomposition and high-accuracy Greens functions: Overcoming the Nyquist-Shannon limit via complex-time Krylov expansion,”
+   arXiv:2411.09680 (2024).
+   [arXiv](https://arxiv.org/abs/2411.09680)
+
+   **Provenance:** Design reference for complex-time Krylov augmentation of real-time correlators.
+
+### Theses and Implementation Guides
+
+1. **FTPS construction** — *implementation guide*
+
+   D. Bauernfeind, *Fork Tensor Product States: Efficient Multi-Orbital Impurity Solver for Dynamical Mean Field Theory*, PhD thesis, Graz University of Technology (2018).
+
+   **Provenance:** Detailed guide to the FTPS construction.
+
+2. **T3N framework** — *implementation guide*
+
+   S. Mardazad, *Simulating real molecules with tensor network techniques*, PhD thesis, LMU Munich (2022).
+
+   **Provenance:** Detailed guide to the T3N framework.
+
+3. **T3N-family impurity topologies** — *implementation guide*
+
+   M. Grundner, *Tensor Network Impurity Solvers: Simulating Quantum Materials*,
+   PhD thesis, LMU Munich (2025).
+
+   **Provenance:** Detailed guide to T3N, FT3N, and MT3N impurity topologies.
 
 ## License
 
