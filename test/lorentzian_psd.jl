@@ -1,4 +1,4 @@
-using LinearAlgebra: Hermitian, I, eigmin, norm
+using LinearAlgebra: Diagonal, Hermitian, I, dot, eigen, eigmin, norm
 
 @testset "experimental scalar LorentzianPSD" begin
     diagnostics = (; source=:constructed)
@@ -70,16 +70,46 @@ using LinearAlgebra: Hermitian, I, eigmin, norm
     @test iszero(maximum(spectral_density(zero_fit, frequencies)))
     @test zero_fit.diagnostics.converged === nothing
     @test zero_fit.diagnostics.optimizer == :initial_nnls
-    @test zero_fit.diagnostics.optimization_skip_reason == :zero_spectrum
+    @test zero_fit.diagnostics.optimization_skip_reason == :zero_psd_projection
 
     @test_throws ArgumentError lorentzian_fit(
         ComplexF64.(samples), frequencies; n_poles=1,
         warn_experimental=false)
-    @test_throws ArgumentError lorentzian_fit(
-        -samples, frequencies; n_poles=1, warn_experimental=false)
-    @test_throws ArgumentError lorentzian_fit(
-        fill(-1e-7, length(frequencies)), frequencies; n_poles=1,
+
+    projection_basis = spectral_density(
+        LorentzianPSD([0.2], [0.35], [1.0], (;)), frequencies)
+    signed_samples = 0.6 .* projection_basis .- 0.02
+    signed_fit = lorentzian_fit(
+        signed_samples, frequencies; n_poles=1, maxiter=0,
+        initial_centers=[0.2], initial_widths=[0.35],
         warn_experimental=false)
+    expected_weight = max(
+        dot(projection_basis, signed_samples) /
+        dot(projection_basis, projection_basis),
+        0.0,
+    )
+    @test signed_fit.weights[1] ≈ expected_weight atol=1e-12
+    @test signed_fit.diagnostics.input_projection.minimum_value < 0
+    @test signed_fit.diagnostics.input_projection.negative_sample_count > 0
+    @test signed_fit.diagnostics.input_projection.nonnegative_cone_distance > 0
+    @test signed_fit.diagnostics.projection ==
+          :lorentzian_constrained_least_squares
+    @test signed_fit.diagnostics.loss == :unweighted_grid_l2
+    @test all(>=(0.0), spectral_density(
+        signed_fit, range(-8.0, 8.0; length=801)))
+    reversed_signed_fit = lorentzian_fit(
+        reverse(signed_samples), reverse(frequencies); n_poles=1, maxiter=0,
+        initial_centers=[0.2], initial_widths=[0.35],
+        warn_experimental=false)
+    @test reversed_signed_fit.weights ≈ signed_fit.weights atol=1e-12
+
+    negative_fit = lorentzian_fit(
+        -samples, frequencies; n_poles=1, warn_experimental=false)
+    @test iszero(negative_fit.weights[1])
+    @test negative_fit.diagnostics.optimization_skip_reason ==
+          :zero_psd_projection
+    @test negative_fit.diagnostics.input_projection.negative_sample_count ==
+          length(samples)
     @test_throws DimensionMismatch lorentzian_fit(
         samples[1:end-1], frequencies; n_poles=1,
         warn_experimental=false)
@@ -129,7 +159,8 @@ end
     @test fixed.diagnostics.sdp_solves == 0
     @test fixed.diagnostics.matrix_dimension == 2
     @test fixed.diagnostics.positivity == :structural_residue_factorization
-    @test fixed.diagnostics.optimizer == :initial_psd_projection
+    @test fixed.diagnostics.optimizer == :initial_psd_residue_fit
+    @test fixed.diagnostics.input_projection.psd_cone_distance < 1e-12
     @test relative_error < 5e-8
     @test all(eigmin(Hermitian(residue)) >= -1e-13
               for residue in fixed.residues)
@@ -179,20 +210,106 @@ end
         zero_samples, frequencies; n_poles=2, maxiter=10,
         warn_experimental=false)
     @test all(iszero, zero_fit.residues)
-    @test zero_fit.diagnostics.optimization_skip_reason == :zero_spectrum
+    @test zero_fit.diagnostics.optimization_skip_reason == :zero_psd_projection
 
     nonhermitian = copy(samples)
     nonhermitian[1] = ComplexF64[1 0.2im; 0.2im 1]
-    indefinite = copy(samples)
-    indefinite[1] = ComplexF64[1 2im; -2im 1]
     inconsistent = copy(samples)
     inconsistent[1] = Matrix{ComplexF64}(I, 3, 3)
     @test_throws ArgumentError lorentzian_fit(
         nonhermitian, frequencies; n_poles=2, warn_experimental=false)
-    @test_throws ArgumentError lorentzian_fit(
-        indefinite, frequencies; n_poles=2, warn_experimental=false)
     @test_throws DimensionMismatch lorentzian_fit(
         inconsistent, frequencies; n_poles=2, warn_experimental=false)
+
+    projection_center = 0.15
+    projection_width = 0.31
+    projection_kernel = spectral_density(
+        LorentzianPSD(
+            [projection_center], [projection_width], [1.0], (;)),
+        frequencies,
+    )
+    raw_residue = ComplexF64[1.0 0.2im; -0.2im -1.0]
+    decomposition = eigen(Hermitian(raw_residue))
+    projected_residue = decomposition.vectors *
+        Diagonal(max.(decomposition.values, 0.0)) * decomposition.vectors'
+    indefinite_samples = [value .* raw_residue for value in projection_kernel]
+    preserved_indefinite_samples = deepcopy(indefinite_samples)
+    projected_fit = lorentzian_fit(
+        indefinite_samples, frequencies; n_poles=1, maxiter=0,
+        initial_centers=[projection_center],
+        initial_widths=[projection_width], warn_experimental=false)
+    @test projected_fit.residues[1] ≈ projected_residue atol=1e-11
+    @test indefinite_samples == preserved_indefinite_samples
+    @test projected_fit.diagnostics.input_projection.minimum_eigenvalue < 0
+    @test projected_fit.diagnostics.input_projection.negative_eigenvalue_count ==
+          length(frequencies)
+    @test projected_fit.diagnostics.input_projection.violating_sample_count ==
+          length(frequencies)
+    @test projected_fit.diagnostics.input_projection.psd_cone_distance > 0
+    @test projected_fit.diagnostics.projection ==
+          :lorentzian_constrained_least_squares
+    @test projected_fit.diagnostics.loss == :unweighted_grid_frobenius
+    @test all(eigmin(Hermitian(value)) >= -1e-12 for value in
+              spectral_density(projected_fit, range(-8.0, 8.0; length=801)))
+    reversed_projected_fit = lorentzian_fit(
+        reverse(indefinite_samples), reverse(frequencies); n_poles=1, maxiter=0,
+        initial_centers=[projection_center],
+        initial_widths=[projection_width], warn_experimental=false)
+    @test reversed_projected_fit.residues[1] ≈
+          projected_fit.residues[1] atol=1e-11
+
+    nearly_hermitian = deepcopy(indefinite_samples)
+    nearly_hermitian[1][1, 2] += 1e-12im
+    nearly_hermitian_fit = lorentzian_fit(
+        nearly_hermitian, frequencies; n_poles=1, maxiter=0,
+        initial_centers=[projection_center],
+        initial_widths=[projection_width], warn_experimental=false)
+    @test nearly_hermitian_fit.diagnostics.input_projection.hermitianization_distance > 0
+
+    noncommuting_residue_a = ComplexF64[1.0 0.8; 0.8 -0.4]
+    noncommuting_residue_b = ComplexF64[-0.3 0.6im; -0.6im 0.9]
+    kernel_a = spectral_density(
+        LorentzianPSD([centers[1]], [widths[1]], [1.0], (;)), frequencies)
+    kernel_b = spectral_density(
+        LorentzianPSD([centers[2]], [widths[2]], [1.0], (;)), frequencies)
+    nonseparable_samples = [
+        kernel_a[n] .* noncommuting_residue_a .+
+        kernel_b[n] .* noncommuting_residue_b
+        for n in eachindex(frequencies)
+    ]
+    _, hermitian_samples, positive_samples, _ =
+        GraftImpurity._lorentzian_matrix_samples(nonseparable_samples, frequencies)
+    fixed_kernel = hcat(kernel_a, kernel_b)
+    positive_initialization = GraftImpurity._matrix_lorentzian_initial_residues(
+        fixed_kernel, positive_samples, 0.0)
+    raw_initialization = GraftImpurity._matrix_lorentzian_initial_residues(
+        fixed_kernel, hermitian_samples, 0.0)
+    @test sum(norm(positive_initialization[j] - raw_initialization[j])
+              for j in eachindex(positive_initialization)) > 1e-3
+    nonseparable_fit = lorentzian_fit(
+        nonseparable_samples, frequencies; n_poles=2, maxiter=0,
+        initial_centers=centers, initial_widths=widths,
+        warn_experimental=false)
+    @test nonseparable_fit.residues ≈ positive_initialization atol=1e-11
+
+    rank_one_samples = [
+        kernel_a[n] .* ComplexF64[1 0; 0 0] for n in eachindex(frequencies)
+    ]
+    activated_residue = only(GraftImpurity._matrix_lorentzian_initial_residues(
+        reshape(kernel_a, :, 1), rank_one_samples, 1e-6))
+    @test eigmin(Hermitian(activated_residue)) > 0
+
+    negative_matrix_fit = lorentzian_fit(
+        [-value .* Matrix{ComplexF64}(I, 2, 2) for value in projection_kernel],
+        frequencies; n_poles=1, warn_experimental=false)
+    @test all(iszero, negative_matrix_fit.residues[1])
+    @test negative_matrix_fit.diagnostics.optimization_skip_reason ==
+          :zero_psd_projection
+
+    nonfinite = copy(samples)
+    nonfinite[1] = ComplexF64[NaN 0; 0 1]
+    @test_throws ArgumentError lorentzian_fit(
+        nonfinite, frequencies; n_poles=2, warn_experimental=false)
     @test_throws ArgumentError MatrixLorentzianPSD(
         [0.0], [0.2], [ComplexF64[1 2im; -2im 1]], (;))
     @test_throws ArgumentError MatrixLorentzianPSD(
