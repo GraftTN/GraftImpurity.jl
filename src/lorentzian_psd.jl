@@ -17,9 +17,10 @@ nonnegativity of the represented spectrum. They do **not** provide a theorem
 that a finite Lorentzian mixture uniquely or uniformly reconstructs an
 arbitrary continuous spectrum from sampled data.
 
-This first experimental surface intentionally accepts only scalar real-axis
-spectra. Matrix-valued, complex-valued, and Matsubara fitting are not part of
-its current contract.
+This scalar surface accepts finite real-valued samples on a real-frequency
+grid. Matrix-valued real-axis spectra use [`MatrixLorentzianPSD`](@ref) and the
+matrix `lorentzian_fit` method; raw retarded and Matsubara Green functions are
+not inputs to either method.
 """
 struct LorentzianPSD{D<:NamedTuple}
     centers::Vector{Float64}
@@ -157,17 +158,19 @@ spectral_density(model::MatrixLorentzianPSD,
                    initial_centers=nothing, initial_widths=nothing,
                    warn_experimental=true) -> LorentzianPSD
 
-Fit sampled scalar, real, nonnegative spectral data with a positive
-Lorentzian mixture. Centers, square-root widths, and square-root weights are
-optimized jointly with `Optim.LBFGS`; the squared parameterization guarantees
-positive widths and nonnegative weights without an SDP or a global
-frequency-grid positivity constraint.
+Fit sampled scalar real-axis spectral data, including signed data, with a
+positive Lorentzian mixture. Centers, square-root widths, and square-root
+weights are optimized jointly with `Optim.LBFGS`; the squared parameterization
+guarantees positive widths and nonnegative weights without an SDP or a global
+frequency-grid positivity constraint. The raw signed samples remain the
+least-squares target; their pointwise nonnegative part is used only to
+initialize centers and to detect the zero projected spectrum.
 
 !!! warning "Highly experimental"
-    Pointwise nonnegativity follows exactly from the parameterization, but no
-    rigorous convergence, uniqueness, finite-component completeness, or
-    off-grid reconstruction-error theorem is currently claimed. The fit is a
-    local nonconvex optimization and can depend on initialization.
+    Pointwise nonnegativity follows exactly from the parameterization, but the
+    projection is an unweighted discrete-grid, local nonconvex fit. No rigorous
+    convergence, uniqueness, finite-component completeness, global-nearest-
+    projection, or off-grid reconstruction-error theorem is claimed.
 
 Only real-axis scalar inputs are accepted in this first version.
 """
@@ -180,9 +183,9 @@ function lorentzian_fit(values::AbstractVector,
                         initial_widths::Union{Nothing,AbstractVector{<:Real}}=nothing,
                         warn_experimental::Bool=true)
     warn_experimental && @warn(
-        "lorentzian_fit is highly experimental: positivity is structural, " *
-        "but convergence, uniqueness, finite-mixture completeness, and off-grid " *
-        "reconstruction accuracy have no rigorous guarantee")
+        "lorentzian_fit is a highly experimental PSD-constrained real-axis " *
+        "approximation: positivity is structural, but convergence, uniqueness, " *
+        "global projection optimality, and off-grid accuracy are not guaranteed")
     n_poles > 0 || throw(ArgumentError("n_poles must be positive"))
     maxiter >= 0 || throw(ArgumentError("maxiter must be nonnegative"))
     length(values) == length(frequencies) ||
@@ -203,15 +206,16 @@ function lorentzian_fit(values::AbstractVector,
         throw(ArgumentError("Lorentzian samples must be finite"))
     length(unique(omega)) == length(omega) ||
         throw(ArgumentError("Lorentzian frequencies must be distinct"))
-    scale = maximum(abs, target; init=0.0)
-    negativity_tolerance = 100eps(Float64) * scale
-    minimum(target; init=0.0) >= -negativity_tolerance ||
-        throw(ArgumentError("LorentzianPSD fitting requires a nonnegative real spectrum"))
-    clipped_negative_sample_count = count(<(0.0), target)
-    target = max.(target, 0.0)
+    input_projection = (;
+        minimum_value=minimum(target),
+        negative_sample_count=count(<(0.0), target),
+        nonnegative_cone_distance=norm(min.(target, 0.0)),
+    )
+    initial_target = max.(target, 0.0)
     order = sortperm(omega)
     omega = omega[order]
     target = target[order]
+    initial_target = initial_target[order]
     span = last(omega) - first(omega)
     span > 0 || throw(ArgumentError("Lorentzian frequency interval must have positive width"))
     grid_resolution = minimum(diff(omega))
@@ -223,7 +227,7 @@ function lorentzian_fit(values::AbstractVector,
         throw(ArgumentError("minimum_width must not exceed the fit interval"))
 
     centers = _lorentzian_initial_centers(
-        omega, target, Int(n_poles), initial_centers)
+        omega, initial_target, Int(n_poles), initial_centers)
     widths = _lorentzian_initial_widths(
         omega, centers, Int(n_poles), initial_widths, width_floor)
     kernel = _lorentzian_kernel(omega, centers, widths)
@@ -232,16 +236,26 @@ function lorentzian_fit(values::AbstractVector,
     nnls_seconds = (time_ns() - nnls_started) / 1e9
 
     width_parameters = sqrt.(max.(widths .- width_floor, eps(Float64)))
-    weight_scale = max(sum(target) * span / length(target), scale * span, 1.0)
-    weight_parameters = iszero(scale) ? zeros(Float64, Int(n_poles)) :
+    projected_scale = maximum(initial_target; init=0.0)
+    weight_scale = max(
+        sum(initial_target) * span / length(initial_target),
+        projected_scale * span,
+        1.0,
+    )
+    weight_parameters = if iszero(projected_scale)
+        zeros(Float64, Int(n_poles))
+    elseif maxiter == 0
+        sqrt.(max.(weights, 0.0))
+    else
         sqrt.(max.(weights, eps(Float64) * weight_scale))
+    end
     parameters = vcat(centers, width_parameters, weight_parameters)
     objective_scale = max(norm(target), eps(Float64))
     objective, gradient! = _lorentzian_objective(
         omega, target, Int(n_poles), width_floor, objective_scale)
 
     optimization_started = time_ns()
-    result = if maxiter == 0 || iszero(scale)
+    result = if maxiter == 0 || iszero(projected_scale)
         nothing
     else
         options = Optim.Options(iterations=Int(maxiter), g_tol=1e-10,
@@ -275,7 +289,9 @@ function lorentzian_fit(values::AbstractVector,
         minimum_width = width_floor,
         grid_resolution,
         spectral_weight = sum(fitted_weights),
-        clipped_negative_sample_count,
+        input_projection,
+        projection = :lorentzian_constrained_least_squares,
+        loss = :unweighted_grid_l2,
         initial_nnls_iterations = nnls_iterations,
         positivity = :structural,
         rigorous_completeness_proof = false,
@@ -286,7 +302,7 @@ function lorentzian_fit(values::AbstractVector,
         elseif maxiter == 0
             :maxiter_zero
         else
-            :zero_spectrum
+            :zero_psd_projection
         end,
         timings = (;
             initial_nnls_seconds = nnls_seconds,
@@ -304,15 +320,20 @@ end
                    initial_centers=nothing, initial_widths=nothing,
                    warn_experimental=true) -> MatrixLorentzianPSD
 
-Fit a real-axis Hermitian PSD matrix spectrum with shared Lorentzian centers
-and widths. The trace spectrum initializes the shared poles. Full complex
-matrix residues are then represented as `R_j = B_j * B_j'` and optimized
-together with the centers and widths by `Optim.LBFGS`. This factorization
-guarantees matrix positivity without an SDP.
+Fit a finite real-axis Hermitian matrix spectrum, including indefinite input,
+with shared Lorentzian centers and widths. The pointwise PSD positive part of
+the input initializes the shared poles; the PSD positive parts of unconstrained
+least-squares residue estimates initialize the factors. The raw Hermitian
+samples remain the Frobenius least-squares target. Full complex matrix residues
+are represented as `R_j = B_j * B_j'` and optimized together with the centers
+and widths by `Optim.LBFGS`. This factorization guarantees matrix positivity
+without an SDP.
 
 The fit is highly experimental and nonconvex. Structural positivity is exact,
-but no global-optimality, uniqueness, finite-mixture completeness, or off-grid
-error theorem is claimed.
+but no global-nearest-projection, convergence, uniqueness, finite-mixture
+completeness, or off-grid error theorem is claimed. Materially non-Hermitian
+samples are rejected; raw retarded or Matsubara Green functions must first be
+converted to a real-axis spectral density.
 """
 function lorentzian_fit(values::AbstractVector{<:AbstractMatrix},
                         frequencies::AbstractVector;
@@ -323,27 +344,33 @@ function lorentzian_fit(values::AbstractVector{<:AbstractMatrix},
                         initial_widths::Union{Nothing,AbstractVector{<:Real}}=nothing,
                         warn_experimental::Bool=true)
     warn_experimental && @warn(
-        "matrix lorentzian_fit is highly experimental: PSD is structural, " *
-        "but convergence, uniqueness, finite-mixture completeness, and off-grid " *
-        "reconstruction accuracy have no rigorous guarantee")
+        "matrix lorentzian_fit is a highly experimental PSD-constrained " *
+        "real-axis approximation: PSD is structural, but convergence, " *
+        "uniqueness, global projection optimality, and off-grid accuracy " *
+        "are not guaranteed")
     n_poles > 0 || throw(ArgumentError("n_poles must be positive"))
     maxiter >= 0 || throw(ArgumentError("maxiter must be nonnegative"))
     started = time_ns()
-    omega, samples, clipped_sample_count =
+    omega, samples, initial_samples, input_projection =
         _lorentzian_matrix_samples(values, frequencies)
     dimension = size(first(samples), 1)
-    trace_target = [sum(real(samples[n][i, i]) for i in 1:dimension)
-                    for n in eachindex(samples)]
+    trace_initialization = [sum(real(initial_samples[n][i, i])
+                                for i in 1:dimension)
+                            for n in eachindex(initial_samples)]
 
     trace_fit = lorentzian_fit(
-        trace_target, omega; n_poles, minimum_width, maxiter,
+        trace_initialization, omega; n_poles, minimum_width, maxiter,
         initial_centers, initial_widths, warn_experimental=false)
     centers = copy(trace_fit.centers)
     widths = copy(trace_fit.widths)
     width_floor = trace_fit.diagnostics.minimum_width
     kernel = _lorentzian_kernel(omega, centers, widths)
+    zero_projection = iszero(maximum(trace_initialization; init=0.0))
+    activation = maxiter == 0 || zero_projection ? 0.0 :
+        sqrt(eps(Float64)) * max(sum(trace_initialization) / Int(n_poles),
+                                 eps(Float64))
     initial_residues = _matrix_lorentzian_initial_residues(
-        kernel, samples, trace_fit.weights)
+        kernel, initial_samples, activation)
     factors = _matrix_lorentzian_factors(initial_residues)
     parameters = _matrix_lorentzian_pack(
         centers, widths, factors, width_floor)
@@ -353,8 +380,7 @@ function lorentzian_fit(values::AbstractVector{<:AbstractMatrix},
         objective_scale)
 
     optimization_started = time_ns()
-    zero_spectrum = iszero(maximum(trace_target; init=0.0))
-    result = if maxiter == 0 || zero_spectrum
+    result = if maxiter == 0 || zero_projection
         nothing
     else
         options = Optim.Options(iterations=Int(maxiter), g_tol=1e-10,
@@ -399,16 +425,18 @@ function lorentzian_fit(values::AbstractVector{<:AbstractMatrix},
         residue_traces = real.(tr.(fitted_residues)),
         total_spectral_weight = sum(fitted_residues),
         minimum_reconstructed_eigenvalue = minimum_eigenvalue,
-        clipped_input_sample_count = clipped_sample_count,
+        input_projection,
+        projection = :lorentzian_constrained_least_squares,
+        loss = :unweighted_grid_frobenius,
         positivity = :structural_residue_factorization,
-        optimizer = result === nothing ? :initial_psd_projection : :lbfgs,
+        optimizer = result === nothing ? :initial_psd_residue_fit : :lbfgs,
         optimization_skipped = result === nothing,
         optimization_skip_reason = if result !== nothing
             nothing
         elseif maxiter == 0
             :maxiter_zero
         else
-            :zero_spectrum
+            :zero_psd_projection
         end,
         trace_initialization = trace_fit.diagnostics,
         sdp_solves = 0,
@@ -586,29 +614,51 @@ function _lorentzian_matrix_samples(values, frequencies)
         first_size[1] > 0 ||
         throw(ArgumentError("matrix Lorentzian samples must be nonempty square matrices"))
     samples = Matrix{ComplexF64}[]
-    clipped = 0
+    projected_samples = Matrix{ComplexF64}[]
+    minimum_eigenvalue = Inf
+    negative_eigenvalue_count = 0
+    violating_sample_count = 0
+    negative_part_norm_squared = 0.0
+    hermitianization_norm_squared = 0.0
     for (n, value) in enumerate(values)
         size(value) == first_size ||
             throw(DimensionMismatch("matrix Lorentzian sample $n has an inconsistent size"))
         matrix = Matrix{ComplexF64}(value)
+        all(z -> isfinite(real(z)) && isfinite(imag(z)), matrix) ||
+            throw(ArgumentError("matrix Lorentzian sample $n must be finite"))
         scale = max(norm(matrix), 1.0)
         norm(matrix - matrix') <= 100sqrt(eps(Float64)) * scale ||
             throw(ArgumentError("matrix Lorentzian sample $n must be Hermitian"))
         hermitian = Matrix{ComplexF64}((matrix + matrix') / 2)
+        hermitianization_norm_squared += sum(abs2, matrix - hermitian)
         decomposition = eigen(Hermitian(hermitian))
-        minimum(decomposition.values) >= -100eps(Float64) * scale ||
-            throw(ArgumentError("matrix Lorentzian sample $n must be positive semidefinite"))
-        clipped += count(<(0.0), decomposition.values)
+        sample_minimum = minimum(decomposition.values)
+        minimum_eigenvalue = min(minimum_eigenvalue, sample_minimum)
+        negative = min.(Float64.(decomposition.values), 0.0)
+        count_negative = count(<(0.0), decomposition.values)
+        negative_eigenvalue_count += count_negative
+        violating_sample_count += !iszero(count_negative)
+        negative_part_norm_squared += sum(abs2, negative)
         eigenvalues = max.(Float64.(decomposition.values), 0.0)
         projected = decomposition.vectors *
                     Diagonal(eigenvalues) * decomposition.vectors'
-        push!(samples, Matrix{ComplexF64}((projected + projected') / 2))
+        push!(samples, hermitian)
+        push!(projected_samples,
+              Matrix{ComplexF64}((projected + projected') / 2))
     end
     order = sortperm(omega)
-    return omega[order], samples[order], clipped
+    input_projection = (;
+        minimum_eigenvalue,
+        negative_eigenvalue_count,
+        violating_sample_count,
+        psd_cone_distance=sqrt(negative_part_norm_squared),
+        hermitianization_distance=sqrt(hermitianization_norm_squared),
+    )
+    return omega[order], samples[order], projected_samples[order], input_projection
 end
 
-function _matrix_lorentzian_initial_residues(kernel, samples, trace_weights)
+function _matrix_lorentzian_initial_residues(kernel, samples,
+                                             activation::Float64)
     nfrequency, n_poles = size(kernel)
     dimension = size(first(samples), 1)
     flattened = Matrix{ComplexF64}(undef, nfrequency, dimension^2)
@@ -616,27 +666,20 @@ function _matrix_lorentzian_initial_residues(kernel, samples, trace_weights)
         flattened[n, :] .= vec(samples[n])
     end
     coefficients = kernel \ flattened
-    total_trace = sum(trace_weights)
-    if iszero(total_trace)
-        return [zeros(ComplexF64, dimension, dimension) for _ in 1:n_poles]
-    end
-    activation = sqrt(eps(Float64)) * max(total_trace / n_poles, eps(Float64))
     residues = Matrix{ComplexF64}[]
     for j in 1:n_poles
         raw = reshape(collect(@view coefficients[j, :]), dimension, dimension)
         decomposition = eigen(Hermitian((raw + raw') / 2))
         eigenvalues = max.(Float64.(decomposition.values), 0.0)
-        desired_trace = max(trace_weights[j], activation)
+        activation > 0 && (eigenvalues .= max.(eigenvalues, activation / dimension))
         if sum(eigenvalues) > eps(Float64)
-            eigenvalues .*= desired_trace / sum(eigenvalues)
-            eigenvalues .= max.(eigenvalues,
-                                sqrt(eps(Float64)) * desired_trace / dimension)
-            eigenvalues .*= desired_trace / sum(eigenvalues)
             residue = decomposition.vectors *
                       Diagonal(eigenvalues) * decomposition.vectors'
-        else
+        elseif activation > 0
             residue = Matrix{ComplexF64}(
-                Diagonal(fill(desired_trace / dimension, dimension)))
+                Diagonal(fill(activation / dimension, dimension)))
+        else
+            residue = zeros(ComplexF64, dimension, dimension)
         end
         push!(residues, Matrix{ComplexF64}((residue + residue') / 2))
     end
