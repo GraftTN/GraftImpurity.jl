@@ -264,8 +264,9 @@ end
     @test shared_up_mounted.diagnostics.ownership_hash !=
           shared_down_mounted.diagnostics.ownership_hash
     shared_physical = _physical_dict(shared_mounted)
-    @test ttno_from_opsum(shared_mounted.H, shared_mounted.topology,
-                          shared_physical; hermitian=true) isa TTNO
+    @test_throws ArgumentError ttno_from_opsum(
+        shared_mounted.H, shared_mounted.topology, shared_physical; hermitian=true,
+    )
 
     u1_local_ops = FermionSiteOperators(
         shared_layout, :cluster; sector=ParticleNumberSector(),

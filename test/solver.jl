@@ -11,6 +11,25 @@ struct _SolverSyntheticKernel <: AbstractRealPoleBathFitKernel
     residue::ComplexF64
 end
 
+struct _SolverBlockSyntheticKernel <: AbstractRealPoleBathFitKernel
+    energy::Float64
+    residue::Matrix{ComplexF64}
+end
+
+function GraftImpurity.real_pole_bath_fit(input::BathFitInput,
+                                          kernel::_SolverBlockSyntheticKernel,
+                                          partition::Partition)
+    interval = SpectralInterval(-2.0, 2.0, 1)
+    plan = DiscretizationPlan(
+        :spin => BlockDiscretizationPlan([interval]); shared_grid=true,
+    )
+    poles = BlockRealPoles(
+        input.layout, partition, [kernel.energy], [kernel.residue], [1];
+        statistics=:fermion,
+    )
+    return PoleExpansion(poles; kernel=:solver_block_synthetic, trace=(; plan))
+end
+
 function GraftImpurity.real_pole_bath_fit(input::BathFitInput,
                                           kernel::_SolverSyntheticKernel,
                                           partition::Partition)
@@ -51,12 +70,39 @@ function _solver_partition()
     return Partition(:d => [:d])
 end
 
+function _solver_block_layout()
+    return FlavorLayout(
+        [:up, :down], Dict(:up => :up_site, :down => :down_site),
+        Dict(:up_site => [:up], :down_site => [:down]); basis=:solver_block_fixture,
+    )
+end
+
+function _solver_block_partition()
+    return Partition(:spin => [:up, :down])
+end
+
 function _solver_hybridization_gf(; beta=10.0, energy=0.2, residue=0.16)
     mesh = ImFreq(beta, true; grid=[-2, -1, 0, 1, 2])
     data = ComplexF64[
         residue / (im * mesh[index] - energy) for index in eachindex(mesh)
     ]
     return Gf(mesh; data, statistics=true, component=:matsubara)
+end
+
+function _solver_block_hybridization_gf(
+    ; beta=10.0, energy=0.2,
+    residue=ComplexF64[0.16 0.03im; -0.03im 0.09],
+)
+    mesh = ImFreq(beta, true; grid=[-2, -1, 0, 1, 2])
+    data = zeros(ComplexF64, 2, 2, length(mesh))
+    for index in eachindex(mesh)
+        data[:, :, index] .= residue ./ (im * mesh[index] - energy)
+    end
+    return Gf(
+        mesh; target_shape=(2, 2), data, statistics=true,
+        component=:matsubara,
+        target_labels=((:up, :down), (:up, :down)),
+    )
 end
 
 function _solver_weiss_gf(; beta=10.0, energy=0.2, residue=0.16)
@@ -126,6 +172,20 @@ function _solver_value(; kernel=_SolverSyntheticKernel(0.2, 0.16 + 0im),
     solver = Solver(
         ; gf_struct=partition, layout, topology_plan=plan, bath_mapping,
         bath_fit_kernel=kernel, ops=operators, compression_atol=1e-12,
+    )
+    return solver, layout, operators
+end
+
+function _solver_block_value(mapping::CayleyTreeKernel)
+    layout = _solver_block_layout()
+    partition = _solver_block_partition()
+    operators = ImpurityOperators(layout; sector=ParticleNumberSector())
+    residue = ComplexF64[0.16 0.03im; -0.03im 0.09]
+    solver = Solver(
+        ; gf_struct=partition, layout, topology_plan=nothing,
+        bath_mapping=mapping,
+        bath_fit_kernel=_SolverBlockSyntheticKernel(0.2, residue),
+        ops=operators, compression_atol=1e-12,
     )
     return solver, layout, operators
 end
@@ -475,6 +535,42 @@ end
     @test collect(Graft.Backend.sectors(Graft.Backend.domain(
         mapped_result.ground_state.state.tensors[
             mapped_result.ground_state.state.topo.root,
+        ],
+    )[1])) == [one_particle]
+
+    block_group = CayleyOwnershipGroup(:spin, [1, 2], [:up, :down])
+    block_mapping = CayleyTreeKernel(BlockCayley(), (block_group,))
+    mapped_block_solver, block_layout, _ = _solver_block_value(block_mapping)
+    block_hloc = ImpurityOneBody(zeros(ComplexF64, 2, 2), block_layout)
+    set_hybridization!(
+        mapped_block_solver,
+        BlockGf(:spin => _solver_block_hybridization_gf()); h_loc0=block_hloc,
+    )
+    mapped_block_initial, mapped_block_mounted = _solver_mapped_initial_state(
+        mapped_block_solver, block_mapping,
+    )
+    @test mapped_block_mounted.mapping.mapped isa BlockCayleyBath
+    @test mapped_block_mounted.mapping.mapped.site_dimensions == [2]
+    @test length(only(mapped_block_mounted.site_modes)) == 2
+    @test collect(Graft.Backend.sectors(Graft.Backend.domain(
+        mapped_block_initial.tensors[mapped_block_initial.topo.root],
+    )[1])) == [one_particle]
+    mapped_block_result = solve!(
+        mapped_block_solver,
+        DensityDensityInteraction(zeros(2, 2), block_layout),
+        SolveRequest(; ground_state=GroundStateRequest(
+            trunc=TruncationScheme(maxdim=8), nsweeps=2, krylovdim=8,
+        )); initial_state=mapped_block_initial,
+    )
+    @test mapped_block_result isa ImpurityResult
+    @test mapped_block_result.mounted isa CayleyAndersonBath
+    @test mapped_block_result.mounted.mapping.mapped isa BlockCayleyBath
+    @test mapped_block_result.mounted.topology == mapped_block_mounted.topology
+    @test mapped_block_solver.mapping_result ===
+          mapped_block_result.mounted.mapping
+    @test collect(Graft.Backend.sectors(Graft.Backend.domain(
+        mapped_block_result.ground_state.state.tensors[
+            mapped_block_result.ground_state.state.topo.root,
         ],
     )[1])) == [one_particle]
 end

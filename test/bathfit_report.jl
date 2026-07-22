@@ -230,7 +230,7 @@ end
         real_mesh; target_shape=(2, 2),
         data=zeros(ComplexF64, 2, 2, length(real_mesh)),
         statistics=true, component=:retarded,
-        temperature=ZeroTemperature(),
+        temperature=GreenFunc.ZeroTemperature(),
         target_labels=((:up, :down), (:up, :down)),
         metadata=(; fixture=:bathfit_report_real_axis),
     )
@@ -268,12 +268,13 @@ end
     retarded_source = BlockGf(
         :charge => Gf(
             real_mesh; data=retarded_charge, statistics=true, component=:retarded,
-            temperature=ZeroTemperature(), metadata=(; fixture=:bathfit_report_retarded),
+            temperature=GreenFunc.ZeroTemperature(),
+            metadata=(; fixture=:bathfit_report_retarded),
         ),
         :spin => Gf(
             real_mesh; target_shape=(2, 2),
             data=_bathfit_report_matrix_data(retarded_spin), statistics=true,
-            component=:retarded, temperature=ZeroTemperature(),
+            component=:retarded, temperature=GreenFunc.ZeroTemperature(),
             target_labels=((:up, :down), (:up, :down)),
             metadata=(; fixture=:bathfit_report_retarded),
         ),
@@ -297,12 +298,13 @@ end
     spectral_source = BlockGf(
         :charge => Gf(
             real_mesh; data=spectral_charge, statistics=true, component=:spectral,
-            temperature=ZeroTemperature(), metadata=(; fixture=:bathfit_report_spectral),
+            temperature=GreenFunc.ZeroTemperature(),
+            metadata=(; fixture=:bathfit_report_spectral),
         ),
         :spin => Gf(
             real_mesh; target_shape=(2, 2),
             data=_bathfit_report_matrix_data(spectral_spin), statistics=true,
-            component=:spectral, temperature=ZeroTemperature(),
+            component=:spectral, temperature=GreenFunc.ZeroTemperature(),
             target_labels=((:up, :down), (:up, :down)),
             metadata=(; fixture=:bathfit_report_spectral),
         ),

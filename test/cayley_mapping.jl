@@ -1,8 +1,10 @@
 using Test
 using LinearAlgebra: Diagonal, Hermitian, I, eigen, eigvals, norm
+using Random: Xoshiro, randn
 using Graft
 using GraftImpurity
-using Graft.TestUtils: to_dense
+using Graft.Backend: FermionParity, TensorMap, Vect, ←
+using Graft.TestUtils: categorical_coordinates, random_ttns, to_dense
 
 function _cayley_delta(coupling::AbstractMatrix{<:Number},
                        bath_hamiltonian::AbstractMatrix{<:Number}, z::Complex)
@@ -173,6 +175,154 @@ function _mounted_raw_operator(mounted::CayleyAndersonBath,
     return ttno_from_opsum(
         lowered.opsum, mounted.topology, physical; hermitian=true,
     )
+end
+
+function _cayley_test_site_operators(mounted::CayleyAndersonBath, sector)
+    mapped = mounted.mapping.mapped
+    layout = bath_layout(mapped)
+    operators = Dict{Symbol,FermionSiteOperators}(
+        site => FermionSiteOperators(layout, site; sector)
+        for site in layout_sites(layout)
+    )
+    for (site, modes) in zip(mounted.sites, mounted.site_modes)
+        operators[site] = FermionSiteOperators(collect(modes); sector)
+    end
+    return operators
+end
+
+function _cayley_car_word(mounted::CayleyAndersonBath,
+                          operators::AbstractDict{Symbol,<:FermionSiteOperators},
+                          left::Tuple{Symbol,Symbol}, left_kind::Symbol,
+                          right::Tuple{Symbol,Symbol}, right_kind::Symbol,
+                          name::Symbol)
+    left_site, left_mode = left
+    right_site, right_mode = right
+    tensor(kind, site, mode) = kind === :C ?
+        local_annihilator(operators[site], mode) :
+        local_creator(operators[site], mode)
+    if left_site == right_site
+        dimension = size(convert(Array, operators[left_site].I), 1)
+        left_matrix = reshape(
+            convert(Array, tensor(left_kind, left_site, left_mode)),
+            dimension, dimension,
+        )
+        right_matrix = reshape(
+            convert(Array, tensor(right_kind, right_site, right_mode)),
+            dimension, dimension,
+        )
+        local_operator = TensorMap(
+            left_matrix * right_matrix,
+            operators[left_site].P ← operators[left_site].P,
+        )
+        H = OpSum() + Term(1.0, SiteOp(left_site, name, local_operator))
+    else
+        sites = Symbol[
+            site for site in mounted.topology.ids if hasproperty(mounted.phys, site)
+        ]
+        positions = Dict(site => position for (position, site) in enumerate(sites))
+        factors = [(left_site, left_kind), (right_site, right_kind)]
+        canonical = sort(copy(factors); by=factor -> (
+            factor[2] === :Cd ? 0 : 1, positions[factor[1]],
+        ))
+        coefficient = factors == canonical ? 1.0 : -1.0
+        H = OpSum() + Term(
+            coefficient,
+            SiteOp(left_site, Symbol(name, :_left),
+                   tensor(left_kind, left_site, left_mode)),
+            SiteOp(right_site, Symbol(name, :_right),
+                   tensor(right_kind, right_site, right_mode)),
+        )
+    end
+    names = propertynames(mounted.phys)
+    first_space = getproperty(mounted.phys, first(names))
+    physical = Dict{Symbol,typeof(first_space)}(
+        site => getproperty(mounted.phys, site) for site in names
+    )
+    return ttno_from_opsum(H, mounted.topology, physical; hermitian=false)
+end
+
+function _test_seeded_cayley_car(mapping::CayleyMappingResult)
+    # Global charged `c_i` is not a neutral fZ2⊗U(1) TTNO.  Use the parity
+    # carrier here so each two-operator word is a legal neutral TTNO, and check
+    # every word against an independent fixed-JW matrix before checking CAR.
+    # The number-oriented multi-mode carrier is covered by the mapped full-
+    # Hamiltonian action gates below.
+    sector = FermionParitySector()
+    mounted = mount_bath(mapping; sector)
+    operators = _cayley_test_site_operators(mounted, sector)
+    names = propertynames(mounted.phys)
+    first_space = getproperty(mounted.phys, first(names))
+    physical = Dict{Symbol,typeof(first_space)}(
+        site => getproperty(mounted.phys, site) for site in names
+    )
+    bond = Vect[FermionParity](FermionParity(0) => 2, FermionParity(1) => 2)
+    state = random_ttns(
+        Xoshiro(20260722), ComplexF64, mounted.topology, physical, bond,
+    )
+    state_coordinates = categorical_coordinates(state)
+    layout = bath_layout(mapping.mapped)
+    selected_modes = Tuple{Symbol,Symbol}[]
+    for site in mounted.topology.ids
+        hasproperty(mounted.phys, site) || continue
+        if site in layout_sites(layout)
+            append!(selected_modes, [(site, mode) for mode in site_modes(layout, site)])
+        else
+            mapped_index = findfirst(==(site), mounted.sites)
+            mapped_index === nothing && throw(ArgumentError(
+                "Cayley CAR fixture found an unknown physical site",
+            ))
+            append!(selected_modes,
+                    [(site, mode) for mode in mounted.site_modes[mapped_index]])
+        end
+    end
+    annihilators = [
+        _fock_annihilator(length(selected_modes), index)
+        for index in eachindex(selected_modes)
+    ]
+    for (left_index, left) in enumerate(selected_modes),
+        (right_index, right) in enumerate(selected_modes)
+        cc_left = _cayley_car_word(
+            mounted, operators, left, :C, right, :C,
+            Symbol(:car_cc_, left_index, :_, right_index),
+        )
+        cc_right = _cayley_car_word(
+            mounted, operators, right, :C, left, :C,
+            Symbol(:car_cc_, right_index, :_, left_index),
+        )
+        cc_left_coordinates = categorical_coordinates(
+            apply(cc_left, state; optimize=false),
+        )
+        cc_right_coordinates = categorical_coordinates(
+            apply(cc_right, state; optimize=false),
+        )
+        ci = annihilators[left_index]
+        cj = annihilators[right_index]
+        @test cc_left_coordinates ≈ ci * cj * state_coordinates atol=2e-11
+        @test cc_right_coordinates ≈ cj * ci * state_coordinates atol=2e-11
+        cc_residual = cc_left_coordinates + cc_right_coordinates
+        @test norm(cc_residual) < 2e-11
+
+        ccd_left = _cayley_car_word(
+            mounted, operators, left, :C, right, :Cd,
+            Symbol(:car_ccd_, left_index, :_, right_index),
+        )
+        ccd_right = _cayley_car_word(
+            mounted, operators, right, :Cd, left, :C,
+            Symbol(:car_cdc_, right_index, :_, left_index),
+        )
+        ccd_left_coordinates = categorical_coordinates(
+            apply(ccd_left, state; optimize=false),
+        )
+        ccd_right_coordinates = categorical_coordinates(
+            apply(ccd_right, state; optimize=false),
+        )
+        @test ccd_left_coordinates ≈ ci * cj' * state_coordinates atol=2e-11
+        @test ccd_right_coordinates ≈ cj' * ci * state_coordinates atol=2e-11
+        ccd_residual = ccd_left_coordinates + ccd_right_coordinates
+        left_index == right_index && (ccd_residual .-= state_coordinates)
+        @test norm(ccd_residual) < 2e-11
+    end
+    return nothing
 end
 
 """
@@ -357,6 +507,7 @@ end
     @test action_raw ≈ action_expected atol=1e-10
     @test action_compressed ≈ action_expected atol=1e-10
     @test action_compressed ≈ action_raw atol=1e-12
+    _test_seeded_cayley_car(action_result)
 
     action_split = map_bath(
         _scalar_kernel(
@@ -466,9 +617,29 @@ end
     )
     shared_result = map_bath(shared_kernel, shared_bath)
     @test shared_result.report.virtual_hub
-    @test_throws ArgumentError mount_bath(
-        shared_result; sector=ParticleNumberSector(),
+    shared_mounted = mount_bath(shared_result; sector=ParticleNumberSector())
+    _test_cayley_topology_extension(shared_mounted)
+    @test length(site_modes(shared_layout, :cluster)) == 2
+    @test Graft.Backend.dim(getproperty(shared_mounted.phys, :cluster)) == 4
+    shared_operators = ImpurityOperators(
+        shared_layout; sector=ParticleNumberSector(),
     )
+    shared_lowered = lower_hamiltonian(
+        shared_mounted, DensityDensityInteraction(zeros(2, 2), shared_layout),
+        shared_operators; compression_atol=1e-12,
+    )
+    shared_expected = _mapped_fock_in_mounted_basis(
+        shared_mounted, zeros(ComplexF64, 2, 2),
+    )
+    shared_raw = _mounted_ttno_action_columns(
+        shared_mounted, _mounted_raw_operator(shared_mounted, shared_lowered),
+    )
+    shared_compressed = _mounted_ttno_action_columns(
+        shared_mounted, shared_lowered.operator,
+    )
+    @test shared_raw ≈ shared_expected atol=1e-10
+    @test shared_compressed ≈ shared_expected atol=1e-10
+    @test shared_compressed ≈ shared_raw atol=1e-12
 
     matrix_partition = Partition(:spin => [:up, :down])
     matrix_orbitals = BathOrbitals(
@@ -574,15 +745,14 @@ end
     )
     @test_throws MethodError mount_bath(result.mapped.topology, result.mapped)
 
-    block_mount_error = try
-        mount_bath(result; sector=ParticleNumberSector())
-        nothing
-    catch err
-        err
-    end
-    @test block_mount_error isa ArgumentError
-    @test occursin("one fermionic mode per physical site",
-                   sprint(showerror, block_mount_error))
+    mounted = mount_bath(result; sector=ParticleNumberSector())
+    @test mounted.mapping === result
+    @test mounted.diagnostics.mapping_kind === :block
+    @test any(>(1), result.mapped.site_dimensions)
+    _test_cayley_topology_extension(mounted)
+    @test_throws ArgumentError mount_bath(
+        result; sector=FermionParitySector(),
+    )
     impurity_onebody = ComplexF64[-0.55 0.04im; -0.04im 0.15]
 
     canonical_onebody = vcat(
@@ -605,6 +775,45 @@ end
     @test real(adjoint(canonical_ground) * impurity_number * canonical_ground) ≈
           real(adjoint(mapped_ground) * impurity_number * mapped_ground) atol=1e-10
 
+    action_bath = _block_cayley_fixture(
+        energies=[-0.8, 0.1, 0.9],
+        couplings=[
+            ComplexF64[0.35 + 0.1im, 0.2 - 0.05im],
+            ComplexF64[0.15im, 0.3 + 0.2im],
+            ComplexF64[0.2 - 0.1im, -0.12im],
+        ],
+    )
+    action_result = map_bath(_block_kernel(length(action_bath)), action_bath)
+    @test any(==(2), action_result.mapped.site_dimensions)
+    @test !isempty(action_result.mapped.edges)
+    action_mounted = mount_bath(action_result; sector=ParticleNumberSector())
+    _test_cayley_topology_extension(action_mounted)
+    action_operators = ImpurityOperators(
+        action_bath.layout; sector=ParticleNumberSector(),
+    )
+    action_rng = Xoshiro(20260722)
+    random_onebody = randn(action_rng, ComplexF64, 2, 2)
+    random_onebody = 0.2 .* (random_onebody + random_onebody')
+    action_onebody = ImpurityOneBody(random_onebody, action_bath.layout)
+    action_lowered = lower_hamiltonian(
+        action_mounted,
+        DensityDensityInteraction(zeros(2, 2), action_bath.layout),
+        action_operators; h_loc=action_onebody, compression_atol=1e-12,
+    )
+    @test action_lowered.compression.mode === :exact_rank
+    action_expected = _mapped_fock_in_mounted_basis(
+        action_mounted, random_onebody,
+    )
+    action_raw = _mounted_ttno_action_columns(
+        action_mounted, _mounted_raw_operator(action_mounted, action_lowered),
+    )
+    action_compressed = _mounted_ttno_action_columns(
+        action_mounted, action_lowered.operator,
+    )
+    @test action_raw ≈ action_expected atol=1e-10
+    @test action_compressed ≈ action_expected atol=1e-10
+    @test action_compressed ≈ action_raw atol=1e-12
+
     split = map_bath(
         _block_kernel(length(bath);
                       partitioner=EnergySplitCayleyPartitioner(0.0)), bath,
@@ -612,7 +821,11 @@ end
     @test length(split.mapped.roots) == 2
     @test split.report.virtual_hub
     @test split.report.root_coupling_residual < 1e-10
-    @test_throws ArgumentError mount_bath(split; sector=ParticleNumberSector())
+    split_mounted = mount_bath(split; sector=ParticleNumberSector())
+    _test_cayley_topology_extension(split_mounted)
+    @test Graft.Trees.nodeid(split_mounted.topology,
+                             split_mounted.topology.root) === :cayley_hub
+    @test !hasproperty(split_mounted.phys, :cayley_hub)
 
     rank_one = _block_cayley_fixture(
         energies=[-0.9, 0.2, 0.8],

@@ -61,7 +61,8 @@ end
         layout, gf, :spin; metadata=(; component=:spectral),
     )
     @test_throws ArgumentError BathFitInput(
-        layout, BlockGf(:spin => gf); metadata=(; temperature=ZeroTemperature()),
+        layout, BlockGf(:spin => gf);
+        metadata=(; temperature=GraftImpurity.ZeroTemperature()),
     )
     bad_labels = Gf(iw; target_shape=(2, 2), data=gf_data, statistics=true,
                     component=:matsubara,

@@ -193,18 +193,39 @@ function _monomial_siteops(layout::FlavorLayout, operators::ImpurityOperators,
         "fermion monomial layout must match ImpurityOperators.layout",
     ))
     groups = Dict{Symbol,Vector{_FermionFactor}}()
-    order = Symbol[]
     for factor in factors
         site = physical_site(layout, factor.flavor)
         if !haskey(groups, site)
             groups[site] = _FermionFactor[]
-            push!(order, site)
         end
         push!(groups[site], factor)
     end
-    return SiteOp[_local_siteop(layout, site, site_operators(operators, site),
-                                groups[site])
-                  for site in order]
+
+    site_rank = Dict(site => rank for (rank, site) in enumerate(layout_sites(layout)))
+    order = sort!(collect(keys(groups)); by=site -> begin
+        net_charge = sum(factor.kind === :Cd ? 1 : -1 for factor in groups[site])
+        charge_class = net_charge > 0 ? 0 : net_charge < 0 ? 1 : 2
+        return charge_class, site_rank[site]
+    end)
+
+    # A Graft Term is a site-labelled tensor product.  Its braid certificate
+    # interprets charged factors in class-normal order: creations,
+    # annihilations, then neutral local products, with the declared physical
+    # site order inside each class.  Grouping a canonical CAR word into local
+    # products can permute odd factors, so retain that exact fermionic sign.
+    grouped = reduce(vcat, (groups[site] for site in order); init=_FermionFactor[])
+    positions = Dict((factor.flavor, factor.kind) => index
+                     for (index, factor) in enumerate(factors))
+    permutation = [positions[(factor.flavor, factor.kind)] for factor in grouped]
+    sign = 1
+    for left in 1:(length(permutation) - 1), right in (left + 1):length(permutation)
+        permutation[left] > permutation[right] && (sign = -sign)
+    end
+
+    siteops = SiteOp[_local_siteop(layout, site, site_operators(operators, site),
+                                   groups[site])
+                     for site in order]
+    return siteops, sign
 end
 
 function _compile_fermion_monomials(layout::FlavorLayout,
@@ -213,7 +234,8 @@ function _compile_fermion_monomials(layout::FlavorLayout,
     H = OpSum()
     for (key, coefficient) in sort!(collect(coefficients); by=entry -> string(entry.first))
         factors = _factors_from_key(key)
-        H += Term(coefficient, _monomial_siteops(layout, operators, factors)...)
+        siteops, grouping_sign = _monomial_siteops(layout, operators, factors)
+        H += Term(grouping_sign * coefficient, siteops...)
     end
     return H
 end

@@ -2,12 +2,12 @@
     CayleyAndersonBath
 
 Concrete mounted fermionic bath produced from a [`CayleyMappingResult`](@ref)
-whose physical sites each carry exactly one fermionic mode. It retains the
-mapped bath-only one-particle Hamiltonian and coupling matrix exactly and is a
-mapped Hamiltonian realization, not a canonical-star fallback. Multi-mode
-physical carriers remain preserved in the mapping result but fail closed at
-this mounting boundary until the core labelled-site braid supports physical
-sector degeneracy.
+on scalar or block physical carriers. It retains the mapped bath-only
+one-particle Hamiltonian and coupling matrix exactly and is a mapped
+Hamiltonian realization, not a canonical-star fallback. Multi-mode impurity
+and bath sites use their declared local Fock ordering. A multi-mode mapped bath
+requires the number-oriented `ParticleNumberSector`; parity-only scalar
+carriers remain supported.
 """
 struct CayleyAndersonBath{M<:CayleyMappingResult,P<:NamedTuple,SM<:Tuple,
                           D<:NamedTuple} <: AbstractMountedBath
@@ -92,16 +92,16 @@ function _cayley_mode_locations(sites::Tuple{Vararg{Symbol}},
 end
 
 function _cayley_annihilator_siteop(site::Symbol, operators::FermionSiteOperators,
-                                    mode::Symbol)
+                                    mode::Symbol, route::Symbol)
     index = _local_mode_index(operators, mode)
-    return SiteOp(site, Symbol("cayley_C_", index),
+    return SiteOp(site, Symbol("cayley_C_", index, "__", route),
                   local_annihilator(operators, mode))
 end
 
 function _cayley_creator_siteop(site::Symbol, operators::FermionSiteOperators,
-                                mode::Symbol)
+                                mode::Symbol, route::Symbol)
     index = _local_mode_index(operators, mode)
-    return SiteOp(site, Symbol("cayley_Cd_", index),
+    return SiteOp(site, Symbol("cayley_Cd_", index, "__", route),
                   local_creator(operators, mode))
 end
 
@@ -150,10 +150,15 @@ function _cayley_mount_hamiltonian(mapping::CayleyMappingResult,
                 left_site, bath[left_site], left_mode, right_mode,
             ))
         else
+            route = Symbol("bath_", row, "_", column)
             H += Term(
                 coefficient,
-                _cayley_creator_siteop(left_site, bath[left_site], left_mode),
-                _cayley_annihilator_siteop(right_site, bath[right_site], right_mode),
+                _cayley_creator_siteop(
+                    left_site, bath[left_site], left_mode, route,
+                ),
+                _cayley_annihilator_siteop(
+                    right_site, bath[right_site], right_mode, route,
+                ),
             )
         end
         retained_bath_terms += 1
@@ -167,36 +172,31 @@ function _cayley_mount_hamiltonian(mapping::CayleyMappingResult,
         flavor = flavors(layout)[flavor_index_value]
         impurity_site = physical_site(layout, flavor)
         bath_site, bath_mode, _ = locations[mode_index]
+        annihilation_route = Symbol(
+            "hybridization_", flavor_index_value, "_", mode_index, "_annihilation",
+        )
+        creation_route = Symbol(
+            "hybridization_", flavor_index_value, "_", mode_index, "_creation",
+        )
         H += Term(
             coefficient,
             SiteOp(impurity_site, Symbol("Cd_", flavor),
                    local_creator(impurity[impurity_site], flavor)),
-            _cayley_annihilator_siteop(bath_site, bath[bath_site], bath_mode),
+            _cayley_annihilator_siteop(
+                bath_site, bath[bath_site], bath_mode, annihilation_route,
+            ),
         )
         H += Term(
             conj(coefficient),
             SiteOp(impurity_site, Symbol("C_", flavor),
                    local_annihilator(impurity[impurity_site], flavor)),
-            _cayley_creator_siteop(bath_site, bath[bath_site], bath_mode),
+            _cayley_creator_siteop(
+                bath_site, bath[bath_site], bath_mode, creation_route,
+            ),
         )
         retained_couplings += 1
     end
     return H, retained_bath_terms, retained_couplings
-end
-
-function _validate_cayley_mount_carriers(mapped::AbstractCayleyBath)
-    layout = bath_layout(mapped)
-    impurity_widths = Int[
-        length(site_modes(layout, site)) for site in layout_sites(layout)
-    ]
-    bath_widths = _cayley_site_dimensions(mapped)
-    all(==(1), impurity_widths) && all(==(1), bath_widths) && return nothing
-    throw(ArgumentError(
-        "Cayley mapped Hamiltonian mounting requires exactly one fermionic mode " *
-        "per physical site; multi-mode physical carriers remain preserved in " *
-        "CayleyMappingResult but are non-mountable until the core labelled-site " *
-        "braid supports physical-sector degeneracy",
-    ))
 end
 
 function _cayley_integrity_hash_matrix(values::AbstractMatrix{<:Number}, state::UInt)
@@ -268,13 +268,12 @@ end
     mount_bath(mapping::CayleyMappingResult; sector=ParticleNumberSector(),
                diagnostics=(;)) -> CayleyAndersonBath
 
-Materialize a transformed one-particle Hamiltonian whose impurity and mapped
-physical sites each carry one fermionic mode on an exact extension of its
-declared mapping topology. The mapped root,
-virtual hubs, forest components, child order, and every mapped edge are retained;
-impurity physical sites are appended beneath that root. The canonical star data
-is retained inside `mapping`; this method never rotates back to it or deletes
-mapped off-diagonal hoppings/couplings.
+Materialize a transformed one-particle Hamiltonian on scalar or block local
+Fock carriers and an exact extension of its declared mapping topology. The
+mapped root, virtual hubs, forest components, child order, and every mapped
+edge are retained; impurity physical sites are appended beneath that root.
+The canonical star data is retained inside `mapping`; this method never rotates
+back to it or deletes mapped off-diagonal hoppings/couplings.
 """
 function mount_bath(mapping::CayleyMappingResult;
                     sector::AbstractFermionSector=ParticleNumberSector(),
@@ -283,7 +282,12 @@ function mount_bath(mapping::CayleyMappingResult;
     bath_statistics(mapped) === :fermion || throw(ArgumentError(
         "Cayley mounting currently requires a fermionic mapped bath",
     ))
-    _validate_cayley_mount_carriers(mapped)
+    sector isa FermionParitySector &&
+        any(>(1), _cayley_site_dimensions(mapped)) && throw(ArgumentError(
+            "multi-mode Cayley bath sites require ParticleNumberSector(); " *
+            "the parity-only carrier has no particle-number orientation for " *
+            "sector-degenerate charged exits",
+        ))
     topology = _cayley_mount_topology(mapping)
     sites, labels, impurity, bath, phys = _cayley_mounted_site_operators(mapping, sector)
     H, retained_bath_terms, retained_couplings = _cayley_mount_hamiltonian(

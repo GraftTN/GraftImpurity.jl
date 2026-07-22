@@ -527,9 +527,8 @@ end
 Run the explicit lifecycle `fit -> realize -> topology/mount -> lower -> DMRG
 -> requested correlators`. A non-mountable real-pole fit returns a typed
 `NonMountableImpurityResult`. An explicit Cayley mapping mounts the retained
-transformed bath Hamiltonian and compatible mapping topology when every
-physical site carries one fermionic mode; multi-mode physical carriers reject
-explicitly at mounting. The Solver never falls back to a canonical diagonal
+transformed bath Hamiltonian and compatible mapping topology on scalar or
+block local Fock carriers. The Solver never falls back to a canonical diagonal
 star.
 """
 function solve!(solver::Solver, interaction::AbstractImpurityInteraction,
