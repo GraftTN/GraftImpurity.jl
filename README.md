@@ -10,65 +10,31 @@ The core of GraftImpurity.jl contains three types of features:
 1. Various bath fitting algorithms from published/verified and experimental methods to fit the hybridization function of fermions and bosons. Whereas the kernel constructions are independent but share common optimisation algorithms. In the future, Lindblad/HEOM-type complex weight+complex pole modes and/or Lorentzian type modes may be extended, subject to the availability of TTNDO features from Graft.jl, i.e., my personal effort toward the TTNDO.
 2. Mapping the effective Hamiltonian through constructing the tree tensor network operator; for T3NS (MT3N) and FTPS, we use star geometry. In the case of Cayley tree or in other cases, star geometry to chain geometry mapping is applied.
 3. Providing the post-processing of Green's functions which may be required for DMFT calculations, such as linear predictor and PSD projection through Lorentzian.
-## Features
 
-- Hamiltonian bath fitting, realization, and mounting with `Partition`,
-  `BlockRealPoles`, `DiscreteBath`, `real_pole_bath_fit`, `realize_bath`, and
-  `mount_bath`.
-- PES/ADAPOL-style pole fitting with `pes_fit`, `evaluate_poles`, and
-  `bath_orbitals`, including scalar NNLS and matrix-valued Hermitian PSD fits.
-- SparseIR adapters for GreenFunc target-first `Gf` objects in imaginary time
-  and Matsubara frequency; they do not perform real-axis continuation.
-- An Anderson-star workflow using `AndersonBath`, two-site DMRG, observables,
-  zero-temperature real-time correlators, and opt-in thermal imaginary-time
-  correlators.
-- Experimental scalar and matrix-valued real-axis Lorentzian fits through
-  `LorentzianPSD`, `MatrixLorentzianPSD`, and `lorentzian_fit`.
+#### Implemented Features
 
-Thermofield is not a finite-temperature solver or bath-fitting contract in this
-package. It is reserved for EDMFT bosonic-bath chain mapping: reorganizing the
-emission and absorption sectors before tree layout. Physical finite-temperature
-impurity-plus-bath states use Graft's ordinary purification route. This refactor
-snapshot therefore does not expose the legacy `ThermofieldRealPoles` or
-temperature-driven `fit_bath` interface.
-
-In `pes_fit`, `solver=:sdp` enforces Hermitian PSD residues, while
-`solver=:least_squares` is unconstrained. Its optional conic diagnostic reports
-the distance to the PSD cone without changing the fit, and `bath_orbitals`
-rejects materially indefinite residues. PES fits may contain positive and
-negative real poles and are distinct from the typed `BlockRealPoles`
-Hamiltonian-bath representation.
-
-The BFGS branch in the `green-jl-counterterms` reference code belongs to the
-same direct coupling-fit model and objective family as `CouplingFitKernel`; it
-is not an extension of `ESPRITTauKernel`, which is the imaginary-time
-ESPRIT route. A corresponding unweighted real-coupling configuration is:
+A quick bath fit example is:
 
 ```julia
 CouplingFitKernel(
-    n_modes=N,
-    alpha=0.0,
-    components=RealComponents(),
-    energy_bounds=(emin, emax),
+    n_modes=N,                    # Bath modes per independently fitted block.
+    alpha=0.0,                    # Matsubara weight exponent; 0 is unweighted.
+    components=RealComponents(),  # Restrict all fitted couplings to be real.
+    energy_bounds=(emin, emax),   # Closed feasible interval for bath energies.
 )
 ```
 
-This mapping is not a literal port. The reference implementation initializes
-randomly and uses `lambda_range` only to initialize energies, leaving them
-unconstrained afterwards. `CouplingFitKernel` instead uses deterministic moment
-initialization, and `energy_bounds` is a true closed feasible interval enforced
-throughout the fit.
-
-The Lorentzian interface accepts real-axis nonnegative or Hermitian PSD data
-only. It is experimental and makes no convergence or uniqueness guarantee.
-The default minimum width is half the smallest input-grid spacing; set
-`minimum_width` to choose another resolution contract. Its full-axis
-`1 / omega^2` tails can make higher spectral moments diverge. The current
-Anderson workflow supports one partition block and requires an explicit warm
-start `psi0`. Real-time series use the zero-temperature DMRG ground state;
-imaginary-time series require finite `beta_eff`, a `thermal_evolver`, and
-thermal purification. Correlator output is raw: fermionic signs, retarded
-assembly, Fourier transforms, and self-energies are left to the caller.
+#### Known Limitations
+The experimental Lorentzian interface computes a PSD-constrained real-axis
+approximation of finite scalar or Hermitian matrix-valued spectral-density
+samples; the input need not already be PSD. The returned finite Lorentzian
+mixture is nonnegative or Hermitian PSD at every real frequency by construction.
+Here “projection” means an initialization-dependent, unweighted least-squares
+fit into the chosen finite Lorentzian family—not pointwise clipping or a
+guaranteed global nearest-cone projection. It does not accept raw retarded or
+Matsubara Green functions and makes no convergence or uniqueness guarantee.
+The default minimum width is half the smallest input-grid spacing; its full-axis
+`1 / omega^2` tails can make higher spectral moments diverge.
 
 ## Local development
 
@@ -76,7 +42,7 @@ Keep the package next to its local dependencies:
 
 ```text
 ~/tmp/
-├── GRAFT.jl/
+├── Graft.jl/
 ├── GraftImpurity.jl/
 └── GreenFunc.jl/
 ```
@@ -85,7 +51,7 @@ Then develop the dependencies and run the test suite:
 
 ```julia
 using Pkg
-Pkg.develop(path="../GRAFT.jl")
+Pkg.develop(path="../Graft.jl")
 Pkg.develop(path="../GreenFunc.jl")
 Pkg.test()
 ```
