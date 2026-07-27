@@ -118,16 +118,21 @@ function BoundaryFitKernel(plan::DiscretizationPlan;
 end
 
 """
-    PESKernel(; tolerance=nothing, n_poles=nothing, solver=:sdp, ...)
+    PESKernel(; tolerance=nothing, n_poles=nothing, solver=:sdp,
+              conic_solver=:clarabel, ...)
 
 Kernel-owned adapter to the independent PES/AAA real-pole algorithm. Exactly
 one stopping policy is required; the kernel retains only numerical options and
-never stores a Green function or fitted expansion.
+never stores a Green function or fitted expansion. Matrix-valued
+`solver=:sdp` fits use `conic_solver=:clarabel` by default for compatibility.
+Install and load SCS.jl, then set `conic_solver=:scs`, to use the optional SCS
+backend.
 """
 struct PESKernel <: AbstractRealPoleBathFitKernel
     tolerance::Union{Nothing,Float64}
     n_poles::Union{Nothing,Int}
     solver::Symbol
+    conic_solver::Symbol
     maxiter::Int
     min_support::Int
     max_support::Int
@@ -137,10 +142,12 @@ struct PESKernel <: AbstractRealPoleBathFitKernel
 
     function PESKernel(tolerance::Union{Nothing,Float64},
                        n_poles::Union{Nothing,Int}, solver::Symbol,
+                       conic_solver::Symbol,
                        maxiter::Int, min_support::Int, max_support::Int,
                        aaa_tolerance::Float64, residue_tolerance::Float64,
                        conic_diagnostic::Symbol, ::Val{:validated})
-        new(tolerance, n_poles, solver, maxiter, min_support, max_support,
+        new(tolerance, n_poles, solver, conic_solver,
+            maxiter, min_support, max_support,
             aaa_tolerance, residue_tolerance, conic_diagnostic)
     end
 end
@@ -148,6 +155,7 @@ end
 function PESKernel(; tolerance::Union{Nothing,Real}=nothing,
                    n_poles::Union{Nothing,Integer}=nothing,
                    solver::Symbol=:sdp,
+                   conic_solver::Symbol=:clarabel,
                    maxiter::Integer=0,
                    min_support::Integer=4,
                    max_support::Integer=50,
@@ -165,6 +173,11 @@ function PESKernel(; tolerance::Union{Nothing,Real}=nothing,
         throw(ArgumentError("PESKernel n_poles must be positive"))
     solver in (:sdp, :least_squares, :lstsq) ||
         throw(ArgumentError("PESKernel solver must be :sdp or :least_squares"))
+    conic_solver in (:clarabel, :scs) ||
+        throw(ArgumentError("PESKernel conic_solver must be :clarabel or :scs"))
+    solver in (:least_squares, :lstsq) && conic_solver != :clarabel &&
+        throw(ArgumentError(
+            "PESKernel conic_solver is only valid with solver=:sdp"))
     maxiter >= 0 || throw(ArgumentError("PESKernel maxiter must be nonnegative"))
     min_support >= 2 ||
         throw(ArgumentError("PESKernel min_support must be at least two"))
@@ -178,9 +191,9 @@ function PESKernel(; tolerance::Union{Nothing,Real}=nothing,
         throw(ArgumentError("PESKernel residue_tolerance must be finite and nonnegative"))
     conic_diagnostic in (:none, :distance) ||
         throw(ArgumentError("PESKernel conic_diagnostic must be :none or :distance"))
-    return PESKernel(resolved_tolerance, resolved_poles, solver, Int(maxiter),
-                     Int(min_support), Int(max_support), aaa, residue,
-                     conic_diagnostic, Val(:validated))
+    return PESKernel(resolved_tolerance, resolved_poles, solver, conic_solver,
+                     Int(maxiter), Int(min_support), Int(max_support), aaa,
+                     residue, conic_diagnostic, Val(:validated))
 end
 
 """

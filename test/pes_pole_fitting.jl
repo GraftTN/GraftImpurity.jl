@@ -52,13 +52,18 @@ end
     matrix_weights = [v * adjoint(v) for v in vectors]
     matrix_values = matrix_samples(poles, matrix_weights, frequencies,
                                    fermion_kernel)
-    matrix_fit = pes_fit(matrix_values, frequencies; n_poles=3,
-                         solver=:sdp, maxiter=0)
+    matrix_fit = @test_logs (
+        :warn,
+        r"Clarabel.*compatibility default.*SCS",
+    ) pes_fit(matrix_values, frequencies; n_poles=3,
+              solver=:sdp, maxiter=0)
     @test matrix_fit.residue_constraint == :psd
     @test all(weight -> norm(weight - weight') < 1e-10, matrix_fit.weights)
     @test all(weight -> eigmin(Hermitian(weight)) >= -1e-10,
               matrix_fit.weights)
     @test matrix_fit.diagnostics.final_solver == :sdp
+    @test matrix_fit.diagnostics.requested_conic_solver == :clarabel
+    @test matrix_fit.diagnostics.used_conic_solver == :clarabel
     @test matrix_fit.diagnostics.sdp_solves == 1
     @test matrix_fit.diagnostics.nnls_solves == 0
     @test matrix_fit.diagnostics.max_abs_error < 2e-6
@@ -69,7 +74,25 @@ end
     @test scalar_sdp_fit.residue_constraint == :psd
     @test scalar_sdp_fit.diagnostics.sdp_solves == 0
     @test scalar_sdp_fit.diagnostics.nnls_solves == 1
+    @test scalar_sdp_fit.diagnostics.used_conic_solver === nothing
     @test scalar_sdp_fit.diagnostics.max_abs_error < 1e-8
+
+    scalar_scs_request = pes_fit(
+        values, frequencies; n_poles=3, solver=:sdp, conic_solver=:scs)
+    @test scalar_scs_request.diagnostics.requested_conic_solver == :scs
+    @test scalar_scs_request.diagnostics.used_conic_solver === nothing
+    @test scalar_scs_request.diagnostics.nnls_solves == 1
+
+    missing_scs = try
+        pes_fit(matrix_values, frequencies; n_poles=3, solver=:sdp,
+                conic_solver=:scs, maxiter=0)
+        nothing
+    catch error
+        error
+    end
+    @test missing_scs isa ArgumentError
+    @test occursin("optional SCS.jl", sprint(showerror, missing_scs))
+    @test occursin("using SCS", sprint(showerror, missing_scs))
 
     orbitals = bath_orbitals(matrix_fit; atol=1e-6)
     reconstructed_weights = [zeros(ComplexF64, 2, 2)
@@ -149,6 +172,11 @@ end
     @test_throws ArgumentError pes_fit(values, frequencies;
                                        n_poles=3, solver=:least_squares,
                                        conic_diagnostic=:solve)
+    @test_throws ArgumentError pes_fit(values, frequencies;
+                                       n_poles=3, conic_solver=:cosmo)
+    @test_throws ArgumentError pes_fit(values, frequencies;
+                                       n_poles=3, solver=:least_squares,
+                                       conic_solver=:scs)
     @test_throws ArgumentError pes_fit(values, -abs.(imag.(frequencies));
                                        n_poles=3)
 end

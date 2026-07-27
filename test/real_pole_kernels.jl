@@ -343,6 +343,10 @@ end
         scalar_partition,
     )
     @test pes_expansion.kernel === :pes
+    @test pes_expansion.trace.conic_solver === :clarabel
+    @test pes_expansion.trace.fits[1].diagnostics.requested_conic_solver ===
+          :clarabel
+    @test pes_expansion.trace.fits[1].diagnostics.used_conic_solver === nothing
     @test pes_expansion.trace.source_metadata == matsubara_input.metadata
     @test isfinite(pes_expansion.trace.fit_seconds) &&
           pes_expansion.trace.fit_seconds >= 0
@@ -353,6 +357,10 @@ end
     @test maximum(norm(_expansion_value(pes_expansion, 1, im * frequency) .-
                        reshape(ComplexF64[value], 1, 1))
                   for (frequency, value) in zip(matsubara_frequencies, matsubara_values)) < 2e-2
+    @test PESKernel(n_poles=2, conic_solver=:scs).conic_solver === :scs
+    @test_throws ArgumentError PESKernel(n_poles=2, conic_solver=:cosmo)
+    @test_throws ArgumentError PESKernel(
+        n_poles=2, solver=:least_squares, conic_solver=:scs)
 
     boson_energy = 0.75
     boson_residue = 0.6

@@ -58,7 +58,8 @@ Base.length(fit::PESPoleFit) = length(fit.poles)
 
 """
     pes_fit(values, frequencies; tolerance=nothing, n_poles=nothing,
-            statistics=:fermion, solver=:sdp, maxiter=0,
+            statistics=:fermion, solver=:sdp, conic_solver=:clarabel,
+            maxiter=0,
             min_support=4, max_support=50, aaa_tolerance=1e-13,
             residue_tolerance=1e-5, conic_diagnostic=:none)
 
@@ -66,9 +67,11 @@ Fit scalar or matrix-valued Matsubara samples with the pole-estimation and
 semidefinite-relaxation pipeline used by ADAPOL.  Exactly one of `tolerance`
 and `n_poles` must be supplied.  Pole locations are initialized by a shared,
 matrix-valued AAA approximation constrained to real poles, then refined with
-`Optim.LBFGS`.  `solver=:sdp` fits every residue in a Hermitian PSD cone using
-`JuMP` and `Clarabel`; `solver=:least_squares` performs the unconstrained
-Hermitian fit and never invokes a conic solver. For least squares,
+`Optim.LBFGS`. `solver=:sdp` fits every residue in a Hermitian PSD cone using
+`JuMP`. Its `conic_solver=:clarabel` default is retained for compatibility;
+install and load SCS.jl, then set `conic_solver=:scs`, to use the optional SCS
+backend. `solver=:least_squares` performs the unconstrained Hermitian fit and
+never invokes a conic solver. For least squares,
 `conic_diagnostic=:distance` reports the exact Frobenius distance to the
 product PSD cone without solving an SDP. The default `:none` adds no
 diagnostic cost.
@@ -82,6 +85,7 @@ function pes_fit(values, frequencies;
                  n_poles::Union{Nothing,Integer}=nothing,
                  statistics::Symbol=:fermion,
                  solver::Symbol=:sdp,
+                 conic_solver::Symbol=:clarabel,
                  maxiter::Integer=0,
                  min_support::Integer=4,
                  max_support::Integer=50,
@@ -94,6 +98,8 @@ function pes_fit(values, frequencies;
         throw(ArgumentError("statistics must be :fermion or :boson"))
     solver in (:sdp, :least_squares, :lstsq) ||
         throw(ArgumentError("solver must be :sdp or :least_squares"))
+    conic_solver in (:clarabel, :scs) ||
+        throw(ArgumentError("conic_solver must be :clarabel or :scs"))
     conic_diagnostic in (:none, :distance) ||
         throw(ArgumentError("conic_diagnostic must be :none or :distance"))
     maxiter >= 0 || throw(ArgumentError("maxiter must be nonnegative"))
@@ -115,6 +121,9 @@ function pes_fit(values, frequencies;
         throw(ArgumentError("PES fitting needs at least three positive Matsubara frequencies"))
 
     canonical_solver = solver == :lstsq ? :least_squares : solver
+    canonical_solver == :least_squares && conic_solver != :clarabel &&
+        throw(ArgumentError(
+            "conic_solver is only valid with solver=:sdp"))
     canonical_solver == :sdp && conic_diagnostic != :none &&
         throw(ArgumentError("conic_diagnostic is only valid with solver=:least_squares"))
     min_s = _pes_even_at_least(Int(min_support))
@@ -153,12 +162,12 @@ function pes_fit(values, frequencies;
         isempty(estimated) && continue
         poles = sort!(Float64.(real.(estimated)))
 
-        preliminary, _, solve_info = _pes_fit_weights(
-            poles, z, samples, canonical_solver, statistics)
-        total_sdp_seconds += solve_info.sdp_seconds
-        total_nnls_seconds += solve_info.nnls_seconds
-        sdp_solves += solve_info.sdp_solves
-        nnls_solves += solve_info.nnls_solves
+        preliminary, _, preliminary_solve_info = _pes_fit_weights(
+            poles, z, samples, canonical_solver, statistics, conic_solver)
+        total_sdp_seconds += preliminary_solve_info.sdp_seconds
+        total_nnls_seconds += preliminary_solve_info.nnls_seconds
+        sdp_solves += preliminary_solve_info.sdp_solves
+        nnls_solves += preliminary_solve_info.nnls_solves
         preliminary_error = _pes_max_error(poles, preliminary, z, samples, statistics)
         poles_changed = false
         if tolerance !== nothing
@@ -173,7 +182,8 @@ function pes_fit(values, frequencies;
         if maxiter > 0
             ls_started = time_ns()
             poles, least_squares_refinement = _pes_refine_poles(
-                poles, z, samples, :least_squares, statistics, Int(maxiter))
+                poles, z, samples, :least_squares, statistics,
+                conic_solver, Int(maxiter))
             total_ls_seconds += (time_ns() - ls_started) / 1e9
             if canonical_solver == :sdp
                 sdp_started = time_ns()
@@ -182,7 +192,8 @@ function pes_fit(values, frequencies;
                 sdp_seconds_counter = Ref(0.0)
                 nnls_seconds_counter = Ref(0.0)
                 poles, sdp_refinement = _pes_refine_poles(
-                    poles, z, samples, :sdp, statistics, Int(maxiter);
+                    poles, z, samples, :sdp, statistics,
+                    conic_solver, Int(maxiter);
                     sdp_counter, nnls_counter, sdp_seconds_counter,
                     nnls_seconds_counter)
                 total_constrained_refinement_seconds +=
@@ -199,7 +210,7 @@ function pes_fit(values, frequencies;
                            sdp_solves=0, nnls_solves=0, backend=:reused)
         else
             fitted, _, info = _pes_fit_weights(
-                poles, z, samples, canonical_solver, statistics)
+                poles, z, samples, canonical_solver, statistics, conic_solver)
             fitted, info
         end
         total_sdp_seconds += solve_info.sdp_seconds
@@ -211,6 +222,7 @@ function pes_fit(values, frequencies;
         if error < best_error
             best_error = error
             best = (; poles=copy(poles), weights=copy.(weights), final_solver,
+                    used_conic_solver=preliminary_solve_info.used_conic_solver,
                     support, aaa_info, preliminary_error,
                     least_squares_refinement, sdp_refinement)
         end
@@ -232,6 +244,8 @@ function pes_fit(values, frequencies;
         statistics,
         requested_solver = canonical_solver,
         final_solver = best.final_solver,
+        requested_conic_solver = canonical_solver == :sdp ? conic_solver : nothing,
+        used_conic_solver = best.used_conic_solver,
         residue_constraint,
         conic_diagnostic = conic_report,
         attempts,
@@ -445,18 +459,21 @@ function _pes_barycentric_poles(support, weights)
     return real.(finite), max_imaginary
 end
 
-function _pes_fit_weights(poles, z, samples, solver::Symbol, statistics::Symbol)
+function _pes_fit_weights(poles, z, samples, solver::Symbol,
+                          statistics::Symbol, conic_solver::Symbol=:clarabel)
     kernel = _pes_kernel_matrix(z, poles, statistics)
     if solver == :least_squares
         weights = _pes_hermitian_least_squares(kernel, samples)
         residual = _pes_residual(kernel, weights, samples)
         return weights, residual, (; sdp_seconds=0.0, nnls_seconds=0.0,
                                     sdp_solves=0, nnls_solves=0,
-                                    backend=:least_squares)
+                                    backend=:least_squares,
+                                    used_conic_solver=nothing)
     end
     solver == :sdp || throw(ArgumentError("unknown PES residue solver: $solver"))
     started = time_ns()
-    weights, backend = _pes_sdp_weights(kernel, samples)
+    weights, backend, used_conic_solver =
+        _pes_sdp_weights(kernel, samples, conic_solver)
     weights = [_pes_validated_psd(weight, k) for (k, weight) in enumerate(weights)]
     elapsed = (time_ns() - started) / 1e9
     residual = _pes_residual(kernel, weights, samples)
@@ -465,7 +482,7 @@ function _pes_fit_weights(poles, z, samples, solver::Symbol, statistics::Symbol)
                                 nnls_seconds=is_nnls ? elapsed : 0.0,
                                 sdp_solves=is_nnls ? 0 : 1,
                                 nnls_solves=is_nnls ? 1 : 0,
-                                backend)
+                                backend, used_conic_solver)
 end
 
 function _pes_hermitian_least_squares(kernel, samples)
@@ -498,7 +515,30 @@ function _pes_hermitian_least_squares(kernel, samples)
     return weights
 end
 
-function _pes_sdp_weights(kernel, samples)
+function _pes_conic_backend(::Val{:clarabel})
+    @warn "PES matrix SDP is using Clarabel, retained as the compatibility default. For better numerical robustness, install and load SCS.jl and set conic_solver=:scs." maxlog=1
+    return (;
+        optimizer=Clarabel.Optimizer,
+        label="Clarabel",
+        attributes=(
+            "tol_gap_abs" => 1e-12,
+            "tol_gap_rel" => 1e-12,
+            "tol_feas" => 1e-12,
+            "max_iter" => 500,
+        ),
+    )
+end
+
+function _pes_conic_backend(::Val{backend}) where {backend}
+    backend == :scs ||
+        throw(ArgumentError("unsupported PES conic solver: $backend"))
+    throw(ArgumentError(
+        "PES conic_solver=:scs requires the optional SCS.jl package; " *
+        "add it with `import Pkg; Pkg.add(\"SCS\")`, run `using SCS`, " *
+        "and retry"))
+end
+
+function _pes_sdp_weights(kernel, samples, conic_solver::Symbol)
     nfrequency, npole = size(kernel)
     d = size(first(samples), 1)
     if d == 1
@@ -508,14 +548,14 @@ function _pes_sdp_weights(kernel, samples)
         coefficients, _ = _nnls(real_kernel, rhs)
         weights = [reshape(ComplexF64[coefficient], 1, 1)
                    for coefficient in coefficients]
-        return weights, :nnls
+        return weights, :nnls, nothing
     end
-    model = JuMP.Model(Clarabel.Optimizer)
+    backend = _pes_conic_backend(Val(conic_solver))
+    model = JuMP.Model(backend.optimizer)
     JuMP.set_silent(model)
-    JuMP.set_optimizer_attribute(model, "tol_gap_abs", 1e-12)
-    JuMP.set_optimizer_attribute(model, "tol_gap_rel", 1e-12)
-    JuMP.set_optimizer_attribute(model, "tol_feas", 1e-12)
-    JuMP.set_optimizer_attribute(model, "max_iter", 500)
+    for (attribute, value) in backend.attributes
+        JuMP.set_optimizer_attribute(model, attribute, value)
+    end
     real_weights = [JuMP.@variable(model, [1:d, 1:d], Symmetric)
                     for _ in 1:npole]
     imag_weights = [JuMP.@variable(model, [1:d, 1:d]) for _ in 1:npole]
@@ -538,19 +578,25 @@ function _pes_sdp_weights(kernel, samples)
         for n in 1:nfrequency, i in 1:d, j in 1:d))
     JuMP.optimize!(model)
     status = JuMP.termination_status(model)
-    status in (JuMP.MOI.OPTIMAL, JuMP.MOI.ALMOST_OPTIMAL) ||
-        throw(ErrorException("Clarabel failed to solve the PES SDP: $status"))
+    if status ∉ (JuMP.MOI.OPTIMAL, JuMP.MOI.ALMOST_OPTIMAL)
+        hint = conic_solver == :clarabel ?
+            " Clarabel is retained as the compatibility default; " *
+            "install and load SCS.jl, then retry with conic_solver=:scs." : ""
+        throw(ErrorException(
+            "$(backend.label) failed to solve the PES SDP: $status.$hint"))
+    end
     result = Matrix{ComplexF64}[]
     for k in 1:npole
         value = ComplexF64.(JuMP.value.(real_weights[k])) .+
                 im .* JuMP.value.(imag_weights[k])
         push!(result, (value + value') / 2)
     end
-    return result, :real_block_sdp
+    return result, :real_block_sdp, conic_solver
 end
 
 function _pes_refine_poles(initial, z, samples, solver::Symbol,
-                           statistics::Symbol, maxiter::Int;
+                           statistics::Symbol, conic_solver::Symbol,
+                           maxiter::Int;
                            sdp_counter::Union{Nothing,Base.RefValue{Int}}=nothing,
                            nnls_counter::Union{Nothing,Base.RefValue{Int}}=nothing,
                            sdp_seconds_counter::Union{Nothing,Base.RefValue{Float64}}=nothing,
@@ -562,7 +608,8 @@ function _pes_refine_poles(initial, z, samples, solver::Symbol,
         if length(cached_poles[]) == length(poles) && cached_poles[] == poles
             return cached_value[], cached_gradient[]
         end
-        weights, residual, info = _pes_fit_weights(poles, z, samples, solver, statistics)
+        weights, residual, info = _pes_fit_weights(
+            poles, z, samples, solver, statistics, conic_solver)
         sdp_counter === nothing || (sdp_counter[] += info.sdp_solves)
         nnls_counter === nothing || (nnls_counter[] += info.nnls_solves)
         sdp_seconds_counter === nothing ||

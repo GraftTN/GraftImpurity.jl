@@ -24,6 +24,39 @@ CouplingFitKernel(
 )
 ```
 
+### Optional PES conic backend
+
+Matrix-valued `pes_fit(...; solver=:sdp)` and `PESKernel` fits use Clarabel by
+default for compatibility. The conic path emits a one-time reminder because
+SCS can be more numerically robust for these real-block PSD problems. To opt
+in, add and load SCS.jl in the active environment and select it explicitly:
+
+```julia
+using Pkg
+Pkg.add("SCS")
+
+using GraftImpurity, SCS
+fit = pes_fit(values, frequencies;
+              n_poles=3, solver=:sdp, conic_solver=:scs)
+kernel = PESKernel(n_poles=3, solver=:sdp, conic_solver=:scs)
+```
+
+Scalar PSD residue fits reduce to NNLS and therefore do not load either conic
+backend. The SCS integration smoke test is opt-in:
+`test/optional/pes_scs_backend.jl`.
+
+On the current Homebrew Julia 1.12/macOS setup, SCS.jl 2.6.4 may fail during
+precompilation or load a second OpenMP runtime before any solve begins. The
+validated local invocation is:
+
+```sh
+DYLD_LIBRARY_PATH=/opt/homebrew/opt/libomp/lib \
+    julia --compiled-modules=no --project test/optional/pes_scs_backend.jl
+```
+
+This is an SCS packaging/runtime compatibility issue, not a PES numerical
+failure. Do not work around it with `KMP_DUPLICATE_LIB_OK`.
+
 #### Known Limitations
 The experimental Lorentzian interface computes a PSD-constrained real-axis
 approximation of finite scalar or Hermitian matrix-valued spectral-density
