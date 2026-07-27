@@ -27,6 +27,92 @@ struct NonMountablePoleFit{E<:PoleExpansion,P<:DiscretizationPlan,
     report::R
 end
 
+function _validate_bathfit_health_compatibility(
+    report::BathFitReport, health::BathFitHealthReport,
+)
+    health.layout == report.source.layout || throw(ArgumentError(
+        "BathFitHealthReport layout does not match the bath-fit result",
+    ))
+    health.statistics === report.source.statistics || throw(ArgumentError(
+        "BathFitHealthReport statistics do not match the bath-fit result",
+    ))
+    hasproperty(health.provenance, :training_source) || throw(ArgumentError(
+        "BathFitHealthReport provenance must contain training_source::BathFitInput",
+    ))
+    training_source = getproperty(health.provenance, :training_source)
+    training_source isa BathFitInput || throw(ArgumentError(
+        "BathFitHealthReport provenance training_source must be a BathFitInput",
+    ))
+    _bathfit_input_target_identical(training_source, report.source) ||
+        throw(ArgumentError(
+            "BathFitHealthReport training source does not match the bath-fit result source",
+        ))
+    return nothing
+end
+
+function _bathfit_input_target_identical(
+    left::BathFitInput, right::BathFitInput,
+)
+    left.layout == right.layout || return false
+    left.domain === right.domain || return false
+    left.statistics === right.statistics || return false
+    left.frequencies == right.frequencies || return false
+    Tuple(keys(left.blocks)) == Tuple(keys(right.blocks)) || return false
+    left.target_labels == right.target_labels || return false
+    for name in keys(left.blocks)
+        left_samples = getproperty(left.blocks, name)
+        right_samples = getproperty(right.blocks, name)
+        length(left_samples) == length(right_samples) || return false
+        for index in eachindex(left_samples, right_samples)
+            size(left_samples[index]) == size(right_samples[index]) ||
+                return false
+            left_samples[index] == right_samples[index] || return false
+        end
+    end
+    return true
+end
+
+function _bathfit_report_with_health(
+    report::BathFitReport, health::BathFitHealthReport,
+)
+    _validate_bathfit_health_compatibility(report, health)
+    return BathFitReport(
+        report.source, report.reconstruction, report.blocks, report.plan,
+        report.kernel, report.mountable, report.broadening, report.diagnostics,
+        report.warnings, report.timing, report.trace; health,
+    )
+end
+
+"""
+    attach_bathfit_health(result, health)
+
+Return a new realization result whose `BathFitReport` carries `health`.
+Expansion, canonical bath (when present), and discretization plan are retained
+by identity; the input result and its report are not mutated.
+
+Attachment fails closed unless `health.provenance.training_source` is a
+`BathFitInput` whose layout, domain, statistics, frequencies, ordered block
+names, per-sample shapes and complex entries, and target labels exactly match
+`result.report.source`. Source metadata and `source_template` object identity
+are deliberately excluded: copied provenance with the same numerical target
+and label contract is accepted.
+"""
+function attach_bathfit_health(
+    result::DiscretizationResult, health::BathFitHealthReport,
+)
+    report = _bathfit_report_with_health(result.report, health)
+    return DiscretizationResult(
+        result.expansion, result.bath, result.plan, report,
+    )
+end
+
+function attach_bathfit_health(
+    result::NonMountablePoleFit, health::BathFitHealthReport,
+)
+    report = _bathfit_report_with_health(result.report, health)
+    return NonMountablePoleFit(result.expansion, result.plan, report)
+end
+
 function _residue_tolerance(residue::AbstractMatrix, atol::Float64,
                             rtol::Float64)
     return atol + rtol * max(opnorm(residue), 1.0)
@@ -408,4 +494,73 @@ function realize_bath(input::BathFitInput, expansion::PoleExpansion,
         resolved_order, realization_seconds; broadening,
     )
     return DiscretizationResult(expansion, bath, plan, report)
+end
+
+function _validate_discretization_mount_ownership(
+    result::DiscretizationResult,
+)
+    report = result.report
+    bath = result.bath
+    report.mountable || throw(ArgumentError(
+        "mount_bath requires a mountable BathFitReport",
+    ))
+    report.plan === result.plan || throw(ArgumentError(
+        "DiscretizationResult report does not own its discretization plan",
+    ))
+    report.kernel === result.expansion.kernel || throw(ArgumentError(
+        "DiscretizationResult report kernel does not match its pole expansion",
+    ))
+    report.source.layout == bath_layout(bath) || throw(ArgumentError(
+        "DiscretizationResult report layout does not match its canonical bath",
+    ))
+    report.source.statistics === bath_statistics(bath) || throw(ArgumentError(
+        "DiscretizationResult report statistics do not match its canonical bath",
+    ))
+    result.expansion.poles.layout == bath_layout(bath) || throw(ArgumentError(
+        "DiscretizationResult pole-expansion layout does not match its canonical bath",
+    ))
+    result.expansion.poles.partition == bath_partition(bath) || throw(ArgumentError(
+        "DiscretizationResult pole expansion does not match its canonical bath partition",
+    ))
+    result.expansion.poles.statistics === bath_statistics(bath) ||
+        throw(ArgumentError(
+            "DiscretizationResult pole-expansion statistics do not match its canonical bath",
+        ))
+    return nothing
+end
+
+"""
+    mount_bath(topology, result::DiscretizationResult;
+               carry_bathfit_health=false, kwargs...)
+
+Mount the canonical bath owned by a realization result. By default no health
+metadata is carried. With `carry_bathfit_health=true`, the result must have an
+attached health report and only its compact immutable summary is added to the
+mounted diagnostics. Mounting always uses the existing canonical-bath path and
+does not refit, gate, or alter the symbolic Hamiltonian.
+"""
+function mount_bath(
+    topology::TreeTopology, result::DiscretizationResult;
+    carry_bathfit_health::Bool=false,
+    site_labels=nothing,
+    sector::AbstractFermionSector=ParticleNumberSector(),
+    diagnostics::NamedTuple=(;),
+)
+    :bathfit_health in keys(diagnostics) && throw(ArgumentError(
+        "bathfit_health diagnostics are owned by DiscretizationResult.report",
+    ))
+    _validate_discretization_mount_ownership(result)
+    mounted_diagnostics = if carry_bathfit_health
+        health = result.report.health
+        health === nothing && throw(ArgumentError(
+            "carry_bathfit_health=true requires an attached BathFitHealthReport",
+        ))
+        merge(diagnostics, (; bathfit_health=_bathfit_health_mount_summary(health)))
+    else
+        diagnostics
+    end
+    return mount_bath(
+        topology, result.bath; site_labels, sector,
+        diagnostics=mounted_diagnostics,
+    )
 end

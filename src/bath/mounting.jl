@@ -136,6 +136,16 @@ function _discrete_bath_integrity_hash(bath::DiscreteBath)
     return state
 end
 
+function _bathfit_health_mount_summary(health)
+    calibration = health.calibration.calibrated
+    selected_order = health.selected_order
+    selection_stability = health.selection_stability
+    selection_interval = health.selection_interval
+    verdicts = health.verdicts.overall
+    return (; calibration, selected_order, selection_stability,
+            selection_interval, verdicts)
+end
+
 function _mount_diagnostics(user::NamedTuple, topology_source::Symbol,
                             retained_couplings::Int, H::OpSum)
     required = (; kind=:anderson, topology_source, retained_couplings,

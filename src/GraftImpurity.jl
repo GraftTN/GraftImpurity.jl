@@ -49,6 +49,10 @@ export FlavorLayout, flavors, flavor_index, physical_site, site_modes,
     DiscretizationPlan, plan_block, PoleBinDiagnostic, BathFitResidual,
     BathFitBlockReport, BathFitTiming, BathFitWarning, BathFitReport,
     BathFitCriteria, BathFitAuditItem, BathFitAudit,
+    AbstractBathFitPerturbation, CovariancePerturbation,
+    EmpiricalReplicaPerturbation, BathFitDiagnosticConfig,
+    BathFitHealthCandidate, BathFitMetricSummary, BathFitOrderHealth,
+    BathFitHealthThresholds, BathFitHealthReport,
     DiscretizationResult, NonMountablePoleFit,
     QuadratureKernel, BoundaryFitKernel, PESKernel, MiniPoleKernel,
     CouplingFitKernel, ESPRITTauKernel, CouplingBlockTie,
@@ -66,6 +70,10 @@ export FlavorLayout, flavors, flavor_index, physical_site, site_modes,
     ChargeU1, FlavorU1, SU2Reduce, SymmetrySpec, SymmetryAuditItem,
     SymmetryAudit, LoweredImpurityHamiltonian, lower_hamiltonian,
     reconstruct_hybridization, residual_hybridization, audit_bathfit,
+    attach_bathfit_health, analyze_bathfit, run_bathfit_diagnostics,
+    DMFTBathBlockRecord, DMFTBathComplexity, DMFTBathIterationRecord,
+    DMFTBathVerdictEvidence, DMFTBathMonitorReport, DMFTBathMonitor,
+    update!, dmft_bath_report,
     audit_symmetry,
     ZeroTemperature, FiniteTemperature, GroundStateRequest, RealTimeRequest,
     ImaginaryTimeRequest, ComplexTimeSegment, ComplexTimeRequest,
@@ -104,11 +112,26 @@ include(joinpath(@__DIR__, "fitting", "nnls.jl"))
 include(joinpath(@__DIR__, "fitting", "input.jl"))
 include(joinpath(@__DIR__, "fitting", "bcf_input.jl"))
 include(joinpath(@__DIR__, "fitting", "plans.jl"))
+include(joinpath(@__DIR__, "diagnostics", "health_types.jl"))
+include(joinpath(@__DIR__, "diagnostics", "health_report_types.jl"))
 include(joinpath(@__DIR__, "diagnostics", "types.jl"))
 include(joinpath(@__DIR__, "diagnostics", "reconstruction.jl"))
 include(joinpath(@__DIR__, "diagnostics", "report.jl"))
 include(joinpath(@__DIR__, "bath", "realization.jl"))
 include(joinpath(@__DIR__, "diagnostics", "audit.jl"))
+include(joinpath(@__DIR__, "diagnostics", "health_residuals.jl"))
+include(joinpath(@__DIR__, "diagnostics", "health_measures.jl"))
+include(joinpath(@__DIR__, "diagnostics", "health_spectral_details.jl"))
+include(joinpath(@__DIR__, "diagnostics", "health_profiles.jl"))
+include(joinpath(@__DIR__, "diagnostics", "health_sensitivity.jl"))
+include(joinpath(@__DIR__, "diagnostics", "health_order_data.jl"))
+include(joinpath(@__DIR__, "diagnostics", "health_analyzer.jl"))
+include(joinpath(@__DIR__, "diagnostics", "health_replicas.jl"))
+include(joinpath(@__DIR__, "diagnostics", "health_runner.jl"))
+include(joinpath(@__DIR__, "diagnostics", "dmft_monitor_types.jl"))
+include(joinpath(@__DIR__, "diagnostics", "dmft_monitor_state.jl"))
+include(joinpath(@__DIR__, "diagnostics", "dmft_monitor_updates.jl"))
+include(joinpath(@__DIR__, "diagnostics", "dmft_monitor_report.jl"))
 include(joinpath(@__DIR__, "fitting", "kernels.jl"))
 include(joinpath(@__DIR__, "fitting", "quadrature.jl"))
 include(joinpath(@__DIR__, "pes_pole_fitting.jl"))

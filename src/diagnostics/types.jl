@@ -161,7 +161,7 @@ layout-bearing source and optional reconstruction. A source adapted from
 `source.source_template`; its reconstructed counterpart keeps an equally typed
 output template in `reconstruction.source_template`. The report also carries
 named block reports, raw residue diagnostics, original kernel trace, warnings,
-and measured timing.
+measured timing, and an optional independently computed bath-fit health report.
 """
 struct BathFitReport{B<:NamedTuple,T<:NamedTuple} <: AbstractBathFitReport
     source::BathFitInput
@@ -175,6 +175,21 @@ struct BathFitReport{B<:NamedTuple,T<:NamedTuple} <: AbstractBathFitReport
     warnings::Vector{BathFitWarning}
     timing::BathFitTiming
     trace::T
+    health::Union{Nothing,BathFitHealthReport}
+end
+
+function BathFitReport(
+    source::BathFitInput, reconstruction::Union{Nothing,BathFitInput},
+    blocks::NamedTuple, plan::DiscretizationPlan, kernel::Symbol,
+    mountable::Bool, broadening::Union{Nothing,Float64},
+    diagnostics::Vector{PoleBinDiagnostic}, warnings::Vector{BathFitWarning},
+    timing::BathFitTiming, trace::NamedTuple;
+    health::Union{Nothing,BathFitHealthReport}=nothing,
+)
+    return BathFitReport(
+        source, reconstruction, blocks, plan, kernel, mountable, broadening,
+        diagnostics, warnings, timing, trace, health,
+    )
 end
 
 """Caller-declared, individually optional bath-fit acceptance thresholds."""
