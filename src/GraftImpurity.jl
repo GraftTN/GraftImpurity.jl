@@ -9,11 +9,17 @@ and solver orchestration. Graft remains dependency-free of this package.
 Thermofield transformations belong only to EDMFT bosonic-bath chain mapping
 and layout; they are not a finite-temperature state-preparation contract.
 Finite-temperature solver requests use Graft's purification machinery.
+
+The `spectra/` layer owns Green-function-adjacent numerics (Matsubara
+transforms today; particle/hole assembly and self-energy are planned). The
+`validation/` layer owns finite-mode Anderson-Holstein benchmark records and
+Kondo/bath scaling analysis; CTSEG itself is never executed here —
+cross-checks read the committed JLD2 reference data only.
 """
 module GraftImpurity
 
-using LinearAlgebra: Diagonal, Hermitian, I, diag, eigen, eigvals, norm, opnorm,
-    qr, svd, tr
+using LinearAlgebra: Diagonal, Hermitian, I, diag, dot, eigen, eigvals, norm,
+    opnorm, qr, svd, tr
 import LinearAlgebra
 using Graft
 import GreenFunc
@@ -83,7 +89,17 @@ export FlavorLayout, flavors, flavor_index, physical_site, site_modes,
     IRCoefficients, fit_ir, evaluate_ir, to_imtime_ir, to_imfreq_ir,
     PESPoleFit, pes_fit, evaluate_poles,
     LorentzianPSD, MatrixLorentzianPSD, lorentzian_fit, spectral_density,
-    complex_poles
+    complex_poles,
+    MatsubaraSeries, matsubara_transform,
+    KondoScalingResult, fit_kondo_scaling,
+    SemicircularBathReport, semicircular_hybridization,
+    gauss_semicircular_bath, discrete_bath_hybridization,
+    validate_semicircular_bath, read_bath_csv,
+    FiniteModeAction, finite_mode_hash, fermionic_frequency,
+    bosonic_frequency, hybridization_iw, retarded_interaction_iv,
+    ThermalBenchmarkDatum,
+    FiniteModeBenchmarkCell, BosonCutoffReport, assess_boson_cutoff,
+    RepresentationComparison, compare_representations
 
 include(joinpath(@__DIR__, "foundations", "layout.jl"))
 include(joinpath(@__DIR__, "foundations", "partition.jl"))
@@ -147,6 +163,10 @@ include(joinpath(@__DIR__, "sparseir_adapter.jl"))
 include(joinpath(@__DIR__, "solver", "types.jl"))
 include(joinpath(@__DIR__, "solver", "requests.jl"))
 include(joinpath(@__DIR__, "solver", "orchestration.jl"))
+include(joinpath(@__DIR__, "spectra", "fourier.jl"))
+include(joinpath(@__DIR__, "validation", "finite_mode.jl"))
+include(joinpath(@__DIR__, "validation", "kondo.jl"))
+include(joinpath(@__DIR__, "validation", "benchmarks.jl"))
 include(joinpath(@__DIR__, "precompile.jl"))
 
 end # module GraftImpurity

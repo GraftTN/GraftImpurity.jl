@@ -32,4 +32,11 @@ const TEST_VERBOSE = lowercase(get(ENV, "GRAFT_TEST_VERBOSE", "false")) in
     include(joinpath(@__DIR__, "pes_pole_fitting.jl"))
     include(joinpath(@__DIR__, "lorentzian_psd.jl"))
     include(joinpath(@__DIR__, "sparseir_adapter.jl"))
+    include(joinpath(@__DIR__, "matsubara.jl"))
+    include(joinpath(@__DIR__, "finite_mode_action.jl"))
+    include(joinpath(@__DIR__, "kondo_scaling.jl"))
+    include(joinpath(@__DIR__, "m2_metal_bath_gtau.jl"))
+    include(joinpath(@__DIR__, "finite_mode_benchmark.jl"))
+    include(joinpath(@__DIR__, "p4_finite_mode_anderson_holstein.jl"))
+    include(joinpath(@__DIR__, "ctseg_reference.jl"))
 end
