@@ -95,6 +95,9 @@ References are grouped by the GraftImpurity functionality they inform. Each
 entry identifies its relation to the package; citing a method does not imply
 that every solver or physical setting in the paper is implemented.
 
+Additional annotated literature notes and working reference records are
+maintained in the sibling `GraftHarness` repository.
+
 ### Bath Discretization and Impurity Geometries
 
 1. **Matrix-valued Hamiltonian bath** — *implemented; algorithmic basis*
