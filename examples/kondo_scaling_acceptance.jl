@@ -1,6 +1,7 @@
 using Graft
 using Graft.TestUtils
 using GraftImpurity
+using JLD2: load
 using Graft.Backend: Vect, FermionParity, dim, domain
 using LinearAlgebra: norm
 using Printf
@@ -155,10 +156,11 @@ function acceptance_bath(full)
         energies, couplings = semicircular_bath(1)
         return energies, ComplexF64.(couplings), nothing
     end
-    default_path = joinpath(
-        @__DIR__, "data", "kondo_semicircular_bath_29.csv")
-    path = get(ENV, "GRAFT_KONDO_BATH_CSV", default_path)
-    energies, couplings = read_bath_csv(path)
+    default_path = normpath(joinpath(
+        @__DIR__, "..", "test", "data", "kondo_semicircular_bath_29.jld2"))
+    path = get(ENV, "GRAFT_KONDO_BATH_JLD2", default_path)
+    artifact = load(path)["artifact"]
+    energies, couplings = artifact.energies, artifact.couplings
     length(energies) == 29 ||
         error("paper Kondo bath must contain exactly 29 sites")
     report = validate_semicircular_bath(

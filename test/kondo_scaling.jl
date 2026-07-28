@@ -1,3 +1,5 @@
+using JLD2: load
+
 @testset "M1 Kondo scaling analysis" begin
     interactions = [8.0, 10.0, 12.0, 15.0]
     temperatures = [1 / 1024, 1 / 512, 1 / 256, 1 / 128]
@@ -51,10 +53,10 @@ end
     @test report.nsites == 29
     @test report.worst_frequency <= 0.01
 
-    artifact_path = normpath(joinpath(
-        @__DIR__, "..", "examples", "data",
-        "kondo_semicircular_bath_29.csv"))
-    fitted_energies, fitted_couplings = read_bath_csv(artifact_path)
+    artifact = load(normpath(joinpath(
+        @__DIR__, "data", "kondo_semicircular_bath_29.jld2")))["artifact"]
+    fitted_energies = artifact.energies
+    fitted_couplings = artifact.couplings
     fitted_report = validate_semicircular_bath(
         fitted_energies, fitted_couplings;
         omega_min=pi / 1024, omega_max=100,
