@@ -1,7 +1,6 @@
 using Graft
 using Graft.TestUtils
 using GraftImpurity
-using JLD2: load
 using Graft.Backend: Vect, FermionParity, dim, domain
 using LinearAlgebra: norm
 using Printf
@@ -156,10 +155,13 @@ function acceptance_bath(full)
         energies, couplings = semicircular_bath(1)
         return energies, ComplexF64.(couplings), nothing
     end
+    Base.find_package("JLD2") === nothing && return nothing
+    jld2 = Base.require(Base.PkgId(
+        Base.UUID("033835bb-8acc-5ee8-8aae-3f567f8a3819"), "JLD2"))
     default_path = normpath(joinpath(
         @__DIR__, "..", "test", "data", "kondo_semicircular_bath_29.jld2"))
     path = get(ENV, "GRAFT_KONDO_BATH_JLD2", default_path)
-    artifact = load(path)["artifact"]
+    artifact = jld2.load(path)["artifact"]
     energies, couplings = artifact.energies, artifact.couplings
     length(energies) == 29 ||
         error("paper Kondo bath must contain exactly 29 sites")
@@ -178,7 +180,13 @@ function main()
         ("1", "true", "yes", "on")
     interactions = full ? [8.0, 10.0, 12.0, 15.0] : [2.0]
     betas = full ? Float64[2^k for k in 1:10] : [0.04]
-    energies, couplings, bath_report = acceptance_bath(full)
+    bath = acceptance_bath(full)
+    if bath === nothing
+        @warn "JLD2 unavailable; skipping paper Kondo acceptance run. " *
+              "Add JLD2 to the active environment to run it."
+        return nothing
+    end
+    energies, couplings, bath_report = bath
     sample_override = get(ENV, "GRAFT_KONDO_NSAMPLES", "")
     sample_counts = isempty(sample_override) ?
         (full ? paper_sample_counts(betas) : fill(1, length(betas))) :
