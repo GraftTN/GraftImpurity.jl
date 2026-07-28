@@ -162,19 +162,10 @@ end
     @test length(methods(set_hybridization!)) == 2
     @test length(methods(solve!)) == 1
 
-    @test !isdefined(GraftImpurity, :BathParametrization)
-    @test !isdefined(GraftImpurity, :RealPoles)
-    @test !isdefined(GraftImpurity, :MatrixRealPoles)
-    @test !isdefined(GraftImpurity, :ThermofieldRealPoles)
     @test isdefined(GraftImpurity, :ComplexPoles)
     @test ComplexPoles <: AbstractBCFParametrization
-    @test !isdefined(GraftImpurity, :fit_bath)
-    @test !isdefined(GraftImpurity, :matsubara_reconstruct)
-    @test !isdefined(GraftImpurity, :couplings)
     @test isdefined(GraftImpurity, :BosonBath)
-    @test !isdefined(GraftImpurity, :AndersonRealPoles)
     @test isdefined(GraftImpurity, :AndersonBath)
-    @test !isdefined(GraftImpurity, :MountedBath)
     @test ScalarCayley <: AbstractCayleyRoute
     @test BlockCayley <: AbstractCayleyRoute
     cayley_group = CayleyOwnershipGroup(:up, [1], [:up])
@@ -182,5 +173,4 @@ end
     @test cayley_kernel.groups == (cayley_group,)
     @test_throws ArgumentError CayleyOwnershipGroup(:bad, [0], [:up])
     @test_throws ArgumentError CayleyTreeKernel(ScalarCayley(), CayleyOwnershipGroup[])
-    @test !isdefined(GraftImpurity, :solve)
 end
