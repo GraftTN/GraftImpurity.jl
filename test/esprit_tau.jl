@@ -75,6 +75,7 @@ end
         n_poles=2, pole_tolerance=1e-8,
         projection_tolerance=1e-10, fit_tolerance=1e-7,
     )
+    @test kernel.reduction isa Graft.AllComponents
     expansion = real_pole_bath_fit(input, kernel, partition)
     @test expansion.kernel === :esprit_tau
     @test expansion.trace.method === :imaginary_time_esprit
@@ -82,12 +83,43 @@ end
     @test isfinite(expansion.trace.fit_seconds) && expansion.trace.fit_seconds >= 0
     @test expansion.trace.fits[1].requested_poles == 2
     @test expansion.trace.fits[1].selected_poles == 2
+    @test expansion.trace.fits[1].node_estimate.outcome isa
+          Graft.IdentifiedNodes
+    @test expansion.trace.fits[1].node_estimate.common.reduction.policy isa
+          Graft.AllComponents
     @test expansion.trace.fits[1].physical_error.relative_l2 < 1e-7
     @test expansion.poles.poles ≈ energies atol=1e-7 rtol=1e-7
     @test any(residue -> abs(residue[1, 2]) > 1e-5,
               expansion.poles.residues)
     @test all(minimum(eigvals(Hermitian(residue))) >= -1e-10
               for residue in expansion.poles.residues)
+
+    declared_diagonal = real_pole_bath_fit(
+        input,
+        ESPRITTauKernel(
+            n_poles=2, pole_tolerance=1e-8,
+            projection_tolerance=1e-10, fit_tolerance=1e-7,
+            reduction=Graft.DeclaredDiagonal(
+                atol=sqrt(sum(sum(abs2, sample) for sample in samples)),
+            ),
+        ),
+        partition,
+    )
+    @test declared_diagonal.poles.partition == partition
+    @test declared_diagonal.poles.poles ≈ expansion.poles.poles atol=1e-7 rtol=1e-7
+    @test declared_diagonal.trace.fits[1].node_estimate.common.reduction.policy isa
+          Graft.DeclaredDiagonal
+    @test declared_diagonal.trace.fits[1].node_estimate.common.reduction.reduced_channels == 2
+    @test any(residue -> abs(residue[1, 2]) > 1e-5,
+              declared_diagonal.poles.residues)
+    @test_throws ArgumentError real_pole_bath_fit(
+        input,
+        ESPRITTauKernel(
+            n_poles=2,
+            reduction=Graft.DeclaredDiagonal(),
+        ),
+        partition,
+    )
 
     result = realize_bath(
         input, expansion, partition; orbital_order=(; spin=[:up, :down]),

@@ -249,7 +249,8 @@ end
 """
     ESPRITTauKernel(; n_poles, pole_tolerance=sqrt(eps()),
                     projection_tolerance=1e-12,
-                    fit_tolerance=nothing)
+                    fit_tolerance=nothing,
+                    reduction=AllComponents())
 
 Imaginary-time matrix-ESPRIT finite-bath fitter. It independently fits each
 named fermionic hybridization block and returns an ordinary `PoleExpansion`.
@@ -260,25 +261,32 @@ direct coupling-fit family represented by
 the imaginary part of an ESPRIT pole energy. `projection_tolerance` controls
 the explicit per-pole PSD positive-part projection, and `fit_tolerance`, when
 provided, is a hard relative-L2 gate applied after that physical projection.
+`reduction` is a typed core `SampleReductionPolicy` used only for node
+evidence; Fermi residues are always refit against every matrix component.
 """
-struct ESPRITTauKernel <: AbstractRealPoleBathFitKernel
+struct ESPRITTauKernel{R<:SampleReductionPolicy} <:
+       AbstractRealPoleBathFitKernel
     n_poles::Int
     pole_tolerance::Float64
     projection_tolerance::Float64
     fit_tolerance::Union{Nothing,Float64}
+    reduction::R
 
     function ESPRITTauKernel(n_poles::Int, pole_tolerance::Float64,
                              projection_tolerance::Float64,
                              fit_tolerance::Union{Nothing,Float64},
-                             ::Val{:validated})
-        new(n_poles, pole_tolerance, projection_tolerance, fit_tolerance)
+                             reduction::R,
+                             ::Val{:validated}) where {R<:SampleReductionPolicy}
+        new{R}(n_poles, pole_tolerance, projection_tolerance, fit_tolerance,
+               reduction)
     end
 end
 
 function ESPRITTauKernel(; n_poles::Integer,
                          pole_tolerance::Real=sqrt(eps(Float64)),
                          projection_tolerance::Real=1e-12,
-                         fit_tolerance::Union{Nothing,Real}=nothing)
+                         fit_tolerance::Union{Nothing,Real}=nothing,
+                         reduction::SampleReductionPolicy=AllComponents())
     count = Int(n_poles)
     count > 0 || throw(ArgumentError(
         "ESPRITTauKernel n_poles must be positive",
@@ -295,7 +303,9 @@ function ESPRITTauKernel(; n_poles::Integer,
     fit === nothing || (isfinite(fit) && fit > 0) || throw(ArgumentError(
         "ESPRITTauKernel fit_tolerance must be finite and positive",
     ))
-    return ESPRITTauKernel(count, pole, projection, fit, Val(:validated))
+    return ESPRITTauKernel(
+        count, pole, projection, fit, reduction, Val(:validated),
+    )
 end
 
 """Allocation policy for the signs of direct-fit bath energies."""

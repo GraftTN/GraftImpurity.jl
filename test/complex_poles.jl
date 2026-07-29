@@ -1,6 +1,8 @@
 using Test
 using LinearAlgebra: norm
+using Graft: ZeroFit
 using GraftImpurity
+using Random: Xoshiro
 
 function _bcf_layout(flavors::Vector{Symbol}; basis::Symbol=:bcf_basis)
     return FlavorLayout(
@@ -52,7 +54,10 @@ end
     @test any(exponent -> abs(imag(exponent)) > 0.1, fitted.poles)
     @test fitted.poles ≈ exponents[sortperm(exponents; by=value ->
                                              (real(value), imag(value)))] atol=1e-8
-    @test fitted.diagnostics.fits[1].engine.selected_attempt.training_error.relative_l2 < 1e-8
+    fitted_engine = fitted.diagnostics.fits[1].engine
+    fitted_attempt =
+        fitted_engine.attempts.attempts[fitted_engine.attempts.selected_attempt]
+    @test fitted_attempt.training_error.relative_l2 < 1e-8
     hamiltonian_input = BathFitInput(
         layout, [0.5, 1.0, 1.5, 2.0],
         :spin => fill(zeros(ComplexF64, 2, 2), 4);
@@ -69,8 +74,33 @@ end
         partition,
     )
     @test length(heldout) == 2
-    @test heldout.diagnostics.fits[1].engine.training_count == length(times) - 2
-    @test heldout.diagnostics.fits[1].engine.selected_attempt.holdout_error.relative_l2 < 1e-8
+    heldout_engine = heldout.diagnostics.fits[1].engine
+    heldout_attempt =
+        heldout_engine.attempts.attempts[heldout_engine.attempts.selected_attempt]
+    @test heldout_engine.diagnostics.sample_count == length(times) - 2
+    @test heldout_attempt.holdout_error.relative_l2 < 1e-8
+
+    noisy_generator = Xoshiro(2026072906)
+    noisy_samples = Matrix{ComplexF64}[
+        sample + 1e-10 * randn(noisy_generator, ComplexF64, 2, 2)
+        for sample in samples
+    ]
+    noisy_input = BCFFitInput(
+        layout, times, :spin => noisy_samples; channel=:boson,
+    )
+    noisy_fit = fit_complex_bcf(
+        noisy_input,
+        MiniPoleKernel(
+            n_poles=4, rank_tolerance=1e-10, holdout_count=2,
+        ),
+        partition,
+    )
+    noisy_history = noisy_fit.diagnostics.fits[1].engine.attempts
+    @test [attempt.attempted_rank for attempt in noisy_history.attempts] ==
+          [4, 3]
+    @test [attempt.outcome.controlled for attempt in noisy_history.attempts] ==
+          [false, true]
+    @test noisy_history.selected_attempt == 1
 
     alias_limit = pi / (times[2] - times[1])
     alias_exponent = ComplexF64(0.55 + 0.99 * alias_limit * im)
@@ -187,7 +217,8 @@ end
     )
     zero_fit = fit_complex_bcf(zero_input, MiniPoleKernel(n_poles=1), partition)
     @test isempty(zero_fit)
-    @test zero_fit.diagnostics.fits[1].engine.selected_attempt.status === :zero_sequence
+    @test zero_fit.diagnostics.fits[1].engine.outcome isa ZeroFit
+    @test isempty(zero_fit.diagnostics.fits[1].engine.attempts.attempts)
     @test all(value -> iszero(norm(value)), evaluate_bcf(zero_fit, times, :spin))
     training_zero_samples = Matrix{ComplexF64}[
         index <= length(times) - 2 ? zeros(ComplexF64, 2, 2) :

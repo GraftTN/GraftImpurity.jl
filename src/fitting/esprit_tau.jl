@@ -22,77 +22,73 @@ function _esprit_tau_imaginary_time_grid(input::BathFitInput,
     return taus, beta, timestep
 end
 
-function _esprit_tau_hankel(samples::Vector{Matrix{ComplexF64}})
+function _esprit_tau_nodes(samples::Vector{Matrix{ComplexF64}},
+                           taus::Vector{Float64},
+                           kernel::ESPRITTauKernel)
     sample_count = length(samples)
-    sample_count >= 4 || throw(ArgumentError(
-        "ESPRITTauKernel matrix ESPRIT needs at least four samples",
-    ))
-    dimension = size(first(samples), 1)
-    all(sample -> size(sample) == (dimension, dimension), samples) ||
-        throw(DimensionMismatch(
-            "ESPRITTauKernel samples need a common square dimension",
-        ))
-
-    component_count = dimension^2
-    signal = zeros(ComplexF64, sample_count, component_count)
-    for sample_index in eachindex(samples)
-        @views signal[sample_index, :] .= vec(samples[sample_index])
-    end
-
-    # This is the default NumericsSOE ESPRIT window, not MiniPole's separate
-    # conformal-Matsubara construction.
     lag = floor(Int, 0.4 * sample_count)
     row_count = sample_count - lag
-    hankel = zeros(ComplexF64, component_count * row_count, lag + 1)
-    for column in 1:(lag + 1)
-        @views hankel[:, column] .=
-            vec(signal[column:(column + row_count - 1), :])
+    estimator = Graft.ESPRIT(
+        rank=Graft.StrictRank(kernel.n_poles, Graft.NumericalRank()),
+        reduction=kernel.reduction,
+        hankel_rows=row_count,
+    )
+    estimate = Graft.estimate_nodes(
+        estimator, Graft.UniformSequence(taus, samples),
+    )
+    outcome = estimate.outcome
+    if outcome isa Graft.AbstractNodeFailure
+        backend = estimate.backend
+        common = estimate.common
+        message = if backend isa Graft.ESPRITDiagnostics &&
+                     kernel.n_poles >= backend.hankel_columns
+            "ESPRITTauKernel requested n_poles=$(kernel.n_poles) must be smaller than the $(backend.hankel_columns) available Hankel singular directions"
+        elseif outcome isa Graft.NodeEstimationFailure &&
+               (outcome.reason === :rank_exceeds_evidence ||
+                outcome.reason === :zero_evidence_rank)
+            "ESPRITTauKernel requested n_poles=$(kernel.n_poles) exceeds block-Hankel numerical rank $(common.evidence_rank)"
+        elseif outcome isa Graft.NodeEstimationFailure &&
+               outcome.reason === :deficient_shift_solve
+            "ESPRITTauKernel ESPRIT leading shift subspace is rank deficient"
+        elseif outcome isa Graft.NodeEstimationFailure &&
+               outcome.reason === :nonfinite_nodes
+            "ESPRITTauKernel matrix ESPRIT produced a nonfinite shift node"
+        elseif outcome isa Graft.NodeEstimationFailure
+            "ESPRITTauKernel core ESPRIT node estimation failed: $(outcome.message)"
+        else
+            "ESPRITTauKernel node-evidence reduction erased the nonzero block signal"
+        end
+        throw(ArgumentError(message))
+    elseif outcome isa Graft.ZeroSequence
+        throw(ArgumentError(
+            "ESPRITTauKernel zero sequence must use the zero-fit path",
+        ))
+    elseif !(outcome isa Graft.IdentifiedNodes)
+        throw(ArgumentError(
+            "ESPRITTauKernel core ESPRIT returned an unsupported node outcome",
+        ))
     end
-    return hankel, lag, row_count
-end
 
-function _esprit_tau_nodes(samples::Vector{Matrix{ComplexF64}},
-                           requested_rank::Int)
-    hankel, lag, row_count = _esprit_tau_hankel(samples)
-    decomposition = svd(hankel; full=false)
-    singular_values = Float64.(decomposition.S)
-    requested_rank < length(singular_values) || throw(ArgumentError(
-        "ESPRITTauKernel requested n_poles=$requested_rank must be smaller than the $(length(singular_values)) available Hankel singular directions",
-    ))
-    isempty(singular_values) && throw(ArgumentError(
-        "ESPRITTauKernel block-Hankel matrix has no singular values",
-    ))
-    evidence_threshold = max(size(hankel)...) * eps(Float64) * first(singular_values)
-    evidence_rank = count(value -> value > evidence_threshold, singular_values)
-    requested_rank <= evidence_rank || throw(ArgumentError(
-        "ESPRITTauKernel requested n_poles=$requested_rank exceeds block-Hankel numerical rank $evidence_rank",
-    ))
-
-    right_vectors = Matrix{ComplexF64}(adjoint(decomposition.Vt))
-    subspace = @view right_vectors[:, 1:requested_rank]
-    leading = @view subspace[1:(end - 1), :]
-    trailing = @view subspace[2:end, :]
-    size(leading, 1) >= requested_rank || throw(ArgumentError(
-        "ESPRITTauKernel requested rank exceeds the ESPRIT shift-system dimension",
-    ))
-    leading_values = Float64.(svd(Matrix{ComplexF64}(adjoint(leading));
-                                          full=false).S)
-    leading_threshold = max(size(leading)...) * eps(Float64) *
-                        first(leading_values)
-    count(value -> value > leading_threshold, leading_values) == requested_rank ||
-        throw(ArgumentError(
-            "ESPRITTauKernel ESPRIT leading shift subspace is rank deficient",
-        ))
-
-    shift = adjoint(trailing) / adjoint(leading)
-    nodes = ComplexF64.(eigen(shift).values)
-    all(node -> isfinite(real(node)) && isfinite(imag(node)), nodes) ||
-        throw(ArgumentError(
-            "ESPRITTauKernel matrix ESPRIT produced a nonfinite shift node",
-        ))
-    return nodes, (; lag, row_count, singular_values, evidence_rank,
-                   evidence_threshold, leading_singular_values=leading_values,
-                   leading_threshold)
+    backend = estimate.backend
+    backend isa Graft.ESPRITDiagnostics || error(
+        "Graft ESPRIT identified nodes without ESPRIT diagnostics",
+    )
+    singular_values = backend.singular_values
+    leading_values = backend.leading_singular_values
+    reduced_channels = estimate.common.reduction.reduced_channels
+    evidence_threshold = max(
+        backend.hankel_rows * reduced_channels, backend.hankel_columns,
+    ) * eps(Float64) * first(singular_values)
+    leading_threshold = max(
+        backend.hankel_columns - 1, estimate.common.resolved_rank,
+    ) * eps(Float64) * first(leading_values)
+    hankel = (; lag=backend.hankel_columns - 1,
+              row_count=backend.hankel_rows, singular_values,
+              evidence_rank=estimate.common.evidence_rank,
+              evidence_threshold,
+              leading_singular_values=leading_values,
+              leading_threshold)
+    return outcome.nodes, hankel, estimate
 end
 
 function _esprit_tau_energies(nodes::Vector{ComplexF64}, timestep::Float64,
@@ -274,7 +270,9 @@ function _esprit_tau_block_fit(samples::Vector{Matrix{ComplexF64}},
                 diagnostic=_esprit_tau_zero_fit(block, kernel.n_poles))
     end
 
-    nodes, hankel = _esprit_tau_nodes(samples, kernel.n_poles)
+    nodes, hankel, node_estimate = _esprit_tau_nodes(
+        samples, taus, kernel,
+    )
     energies, ordered_nodes = _esprit_tau_energies(
         nodes, timestep, kernel.pole_tolerance,
     )
@@ -299,7 +297,8 @@ function _esprit_tau_block_fit(samples::Vector{Matrix{ComplexF64}},
                   nodes=ordered_nodes,
                   singular_values=hankel.singular_values,
                   raw_weights, projection_diagnostics,
-                  raw_error, physical_error, hankel, least_squares)
+                  raw_error, physical_error, hankel, least_squares,
+                  node_estimate)
     return (; energies, residues, diagnostic)
 end
 

@@ -2,10 +2,65 @@
 Real-Hamiltonian MiniPole adapter.
 
 This file adapts a conformal rational Matsubara interpolant into a finite
-matrix moment sequence and then invokes the shared matrix-ESPRIT engine. It
+matrix moment sequence and then invokes Graft's shared exponential-sum engine. It
 does not implement or expose a complex BCF result: use `fit_complex_bcf` with
 `BCFFitInput` for that distinct typed contract.
 """
+
+"""
+Fit one uniformly sampled MiniPole exponential sequence through the stable
+Graft-core policy mapping. The explicit time-major left-subspace backend
+preserves MiniPole's frozen noisy attempt behavior; unqualified core `ESPRIT`
+remains the right-subspace default. This is the impurity boundary for MiniPole's rank
+heuristic, pruning rule, holdout split, fit tolerance, and structured core
+failure conversion; all Hankel, ESPRIT, refit, and descending-search numerics
+remain in Graft.
+"""
+function _fit_minipole_exponential_sequence(
+    times::AbstractVector{<:Real},
+    samples::Vector{Matrix{ComplexF64}},
+    kernel::MiniPoleKernel,
+)
+    sample_count = length(samples)
+    training_count = sample_count - kernel.holdout_count
+    training_count >= 4 || throw(ArgumentError(
+        "MiniPole holdout_count leaves fewer than four training samples",
+    ))
+    legacy_lag = clamp(
+        fld(2 * (training_count - 1), 5),
+        1,
+        fld(training_count - 1, 2),
+    )
+    estimator = LeftSubspaceESPRIT(
+        rank=ClampedRank(
+            kernel.n_poles,
+            RelativeThresholdRank(kernel.rank_tolerance),
+        ),
+        reduction=AllComponents(),
+        hankel_rows=training_count - legacy_lag,
+    )
+    search = DescendingRankSearch(
+        estimator;
+        initial_rank=kernel.n_poles,
+        pruning=WeightNormPruning(rtol=kernel.rank_tolerance),
+        stop=FirstControlled(),
+        selection=MinimumTrainingRelativeL2(),
+        holdout_count=kernel.holdout_count,
+    )
+    fit = fit_exponential_sum(search, times, samples)
+    if fit.outcome isa FailedFit
+        failure = fit.outcome.node_estimate.outcome
+        message = failure isa NodeEstimationFailure ?
+            failure.message : sprint(show, failure)
+        throw(ArgumentError("MiniPole exponential fit failed: $message"))
+    end
+    kernel.fit_tolerance === nothing ||
+        fit.diagnostics.relative_l2 <= kernel.fit_tolerance ||
+        throw(ArgumentError(
+            "MiniPole relative training error exceeds the requested fit_tolerance",
+        ))
+    return fit
+end
 
 function _minipole_scale(frequencies::Vector{Float64}, kernel::MiniPoleKernel)
     kernel.conformal_scale === nothing || return kernel.conformal_scale
@@ -274,14 +329,28 @@ function _minipole_real_block_fit(samples::Vector{Matrix{ComplexF64}},
                     domain_tolerance,
                 )
                 moment_count = max(4, 2 * length(roots) + 2)
-                moments = _minipole_sequence_values(roots, moment_weights, moment_count)
+                moment_times = collect(0.0:1.0:(moment_count - 1))
+                moment_value = ExponentialSum(
+                    ComplexF64.(-log.(roots)), moment_weights,
+                )
+                moments = Matrix{ComplexF64}.(
+                    evaluate(moment_value, moment_times),
+                )
                 moment_kernel = MiniPoleKernel(
                     n_poles=rank, rank_tolerance=kernel.rank_tolerance,
                     conformal_scale=scale, holdout_count=0,
                 )
-                moment_fit = _minipole_exponential_fit(moments, moment_kernel)
+                moment_fit = _fit_minipole_exponential_sequence(
+                    moment_times, moments, moment_kernel,
+                )
+                moment_fit.outcome isa IdentifiedFit || throw(ArgumentError(
+                    "MiniPole conformal moment sequence produced a zero exponential fit",
+                ))
+                refined_nodes = ComplexF64.(
+                    exp.(-moment_fit.outcome.value.poles),
+                )
                 refined_energies = _minipole_mapped_real_energies(
-                    moment_fit.nodes, scale, domain_tolerance,
+                    refined_nodes, scale, domain_tolerance,
                 )
                 order = sortperm(refined_energies)
                 ordered_energies = refined_energies[order]
@@ -313,7 +382,7 @@ function _minipole_real_block_fit(samples::Vector{Matrix{ComplexF64}},
                     ))
                 accepted = (; scale, rank, status=:accepted, denominator,
                             denominator_residual, roots, preliminary_energies,
-                            moment_engine=moment_fit.diagnostics,
+                            moment_engine=moment_fit,
                             energies_before_pruning=ordered_energies,
                             retained_indices=retained, discarded_indices=discarded,
                             residue_norms, pruning_threshold=cutoff,
