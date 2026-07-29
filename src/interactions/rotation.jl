@@ -32,9 +32,9 @@ function _rotate_coulomb_tensor(tensor::AbstractArray{<:Number,4},
                                 rotation::AbstractMatrix{<:Number})
     dimension = size(tensor, 1)
     stage_i = zeros(ComplexF64, dimension, dimension, dimension, dimension)
-    stage_j = similar(stage_i)
-    stage_k = similar(stage_i)
-    result = similar(stage_i)
+    stage_j = zeros(ComplexF64, dimension, dimension, dimension, dimension)
+    stage_k = zeros(ComplexF64, dimension, dimension, dimension, dimension)
+    result = zeros(ComplexF64, dimension, dimension, dimension, dimension)
     for a in 1:dimension, j in 1:dimension, k in 1:dimension, l in 1:dimension
         for i in 1:dimension
             stage_i[a, j, k, l] += conj(rotation[i, a]) * tensor[i, j, k, l]

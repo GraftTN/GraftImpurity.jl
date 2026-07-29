@@ -27,6 +27,37 @@ function _m6_kanamori_layout()
     )
 end
 
+@testset "Coulomb tensor rotation scratch initialization" begin
+    dimension = 3
+    rotation = ComplexF64[
+        cis(2π * (row - 1) * (column - 1) / dimension) / sqrt(dimension)
+        for row in 1:dimension, column in 1:dimension
+    ]
+    tensor = reshape(
+        ComplexF64[
+            value + im * (dimension^4 + 1 - value) / dimension^2
+            for value in 1:dimension^4
+        ],
+        ntuple(_ -> dimension, 4),
+    )
+    reference = zeros(ComplexF64, ntuple(_ -> dimension, 4))
+    for a in 1:dimension, b in 1:dimension,
+        c in 1:dimension, d in 1:dimension
+        reference[a, b, c, d] = sum(
+            conj(rotation[i, a]) * conj(rotation[j, b]) *
+            tensor[i, j, k, l] * rotation[k, c] * rotation[l, d]
+            for i in 1:dimension, j in 1:dimension,
+                k in 1:dimension, l in 1:dimension
+        )
+    end
+
+    @test GraftImpurity._rotate_coulomb_tensor(tensor, rotation) ≈
+        reference atol=1e-11 rtol=1e-12
+    @test all(iszero, GraftImpurity._rotate_coulomb_tensor(
+        zeros(ComplexF64, ntuple(_ -> dimension, 4)), rotation,
+    ))
+end
+
 @testset "M6 interaction lowering" begin
     layout = _m6_shared_layout()
     operators = ImpurityOperators(layout; sector=ParticleNumberSector())
