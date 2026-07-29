@@ -67,11 +67,13 @@ Fit scalar or matrix-valued Matsubara samples with the pole-estimation and
 semidefinite-relaxation pipeline used by ADAPOL.  Exactly one of `tolerance`
 and `n_poles` must be supplied.  Pole locations are initialized by a shared,
 matrix-valued AAA approximation constrained to real poles, then refined with
-`Optim.LBFGS`. `solver=:sdp` fits every residue in a Hermitian PSD cone using
-`JuMP`. Its `conic_solver=:clarabel` default is retained for compatibility;
-install and load SCS.jl, then set `conic_solver=:scs`, to use the optional SCS
-backend. `solver=:least_squares` performs the unconstrained Hermitian fit and
-never invokes a conic solver. For least squares,
+`Optim.LBFGS`. With `solver=:sdp`, an exactly diagonal matrix sequence retains
+the shared AAA poles and fits each diagonal residue channel with NNLS. Other
+matrix sequences fit every residue in a Hermitian PSD cone using `JuMP`. Its
+`conic_solver=:clarabel` default is retained for compatibility; install and
+load SCS.jl, then set `conic_solver=:scs`, to use the optional SCS backend.
+`solver=:least_squares` performs the unconstrained Hermitian fit and never
+invokes a conic solver. For least squares,
 `conic_diagnostic=:distance` reports the exact Frobenius distance to the
 product PSD cone without solving an SDP. The default `:none` adds no
 diagnostic cost.
@@ -223,6 +225,7 @@ function pes_fit(values, frequencies;
             best_error = error
             best = (; poles=copy(poles), weights=copy.(weights), final_solver,
                     used_conic_solver=preliminary_solve_info.used_conic_solver,
+                    residue_backend=preliminary_solve_info.backend,
                     support, aaa_info, preliminary_error,
                     least_squares_refinement, sdp_refinement)
         end
@@ -246,6 +249,7 @@ function pes_fit(values, frequencies;
         final_solver = best.final_solver,
         requested_conic_solver = canonical_solver == :sdp ? conic_solver : nothing,
         used_conic_solver = best.used_conic_solver,
+        residue_backend = best.residue_backend,
         residue_constraint,
         conic_diagnostic = conic_report,
         attempts,
@@ -477,11 +481,18 @@ function _pes_fit_weights(poles, z, samples, solver::Symbol,
     weights = [_pes_validated_psd(weight, k) for (k, weight) in enumerate(weights)]
     elapsed = (time_ns() - started) / 1e9
     residual = _pes_residual(kernel, weights, samples)
-    is_nnls = backend == :nnls
+    nnls_solves = if backend == :nnls
+        1
+    elseif backend == :diagonal_nnls
+        size(first(samples), 1)
+    else
+        0
+    end
+    is_nnls = nnls_solves > 0
     return weights, residual, (; sdp_seconds=is_nnls ? 0.0 : elapsed,
                                 nnls_seconds=is_nnls ? elapsed : 0.0,
                                 sdp_solves=is_nnls ? 0 : 1,
-                                nnls_solves=is_nnls ? 1 : 0,
+                                nnls_solves,
                                 backend, used_conic_solver)
 end
 
@@ -538,18 +549,46 @@ function _pes_conic_backend(::Val{backend}) where {backend}
         "and retry"))
 end
 
-function _pes_sdp_weights(kernel, samples, conic_solver::Symbol)
-    nfrequency, npole = size(kernel)
-    d = size(first(samples), 1)
-    if d == 1
-        real_kernel = vcat(real.(kernel), imag.(kernel))
-        rhs = vcat([real(samples[n][1, 1]) for n in 1:nfrequency],
-                   [imag(samples[n][1, 1]) for n in 1:nfrequency])
-        coefficients, _ = _nnls(real_kernel, rhs)
-        weights = [reshape(ComplexF64[coefficient], 1, 1)
-                   for coefficient in coefficients]
-        return weights, :nnls, nothing
+function _pes_samples_are_exactly_diagonal(
+    samples::Vector{Matrix{ComplexF64}},
+)
+    dimension = size(first(samples), 1)
+    for sample in samples, column in 1:dimension, row in 1:dimension
+        row == column && continue
+        iszero(sample[row, column]) || return false
     end
+    return true
+end
+
+function _pes_diagonal_nnls_weights(
+    kernel::Matrix{ComplexF64},
+    samples::Vector{Matrix{ComplexF64}},
+)
+    nfrequency, npole = size(kernel)
+    dimension = size(first(samples), 1)
+    real_kernel = vcat(real.(kernel), imag.(kernel))
+    weights = [zeros(ComplexF64, dimension, dimension) for _ in 1:npole]
+    for diagonal in 1:dimension
+        rhs = vcat(
+            [real(samples[n][diagonal, diagonal]) for n in 1:nfrequency],
+            [imag(samples[n][diagonal, diagonal]) for n in 1:nfrequency],
+        )
+        coefficients, _ = _nnls(real_kernel, rhs)
+        for pole in 1:npole
+            weights[pole][diagonal, diagonal] = coefficients[pole]
+        end
+    end
+    return weights
+end
+
+function _pes_sdp_weights(kernel, samples, conic_solver::Symbol)
+    d = size(first(samples), 1)
+    if _pes_samples_are_exactly_diagonal(samples)
+        weights = _pes_diagonal_nnls_weights(kernel, samples)
+        backend = d == 1 ? :nnls : :diagonal_nnls
+        return weights, backend, nothing
+    end
+    nfrequency, npole = size(kernel)
     backend = _pes_conic_backend(Val(conic_solver))
     model = JuMP.Model(backend.optimizer)
     JuMP.set_silent(model)

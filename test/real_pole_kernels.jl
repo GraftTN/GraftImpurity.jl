@@ -357,6 +357,48 @@ end
     @test maximum(norm(_expansion_value(pes_expansion, 1, im * frequency) .-
                        reshape(ComplexF64[value], 1, 1))
                   for (frequency, value) in zip(matsubara_frequencies, matsubara_values)) < 2e-2
+
+    diagonal_matsubara_values = Matrix{ComplexF64}[
+        ComplexF64[
+            0.8 / (im * frequency + 0.75) +
+                0.4 / (im * frequency - 0.5) 0.0
+            0.0 0.3 / (im * frequency + 0.75) +
+                0.6 / (im * frequency - 0.5)
+        ]
+        for frequency in matsubara_frequencies
+    ]
+    diagonal_matsubara_input = BathFitInput(
+        matrix_layout, matsubara_frequencies,
+        :spin => diagonal_matsubara_values;
+        domain=:matsubara, statistics=:fermion,
+    )
+    diagonal_pes_expansion = real_pole_bath_fit(
+        diagonal_matsubara_input,
+        PESKernel(
+            n_poles=2, solver=:sdp, conic_solver=:scs, maxiter=0,
+            min_support=4, max_support=4,
+        ),
+        matrix_partition,
+    )
+    diagonal_pes_diagnostics =
+        diagonal_pes_expansion.trace.fits[1].diagnostics
+    @test diagonal_pes_diagnostics.residue_backend == :diagonal_nnls
+    @test diagonal_pes_diagnostics.used_conic_solver === nothing
+    @test diagonal_pes_diagnostics.sdp_solves == 0
+    @test diagonal_pes_diagnostics.nnls_solves == 2
+    @test all(
+        residue -> iszero(residue[1, 2]) && iszero(residue[2, 1]),
+        diagonal_pes_expansion.poles.residues,
+    )
+    @test maximum(
+        norm(
+            _expansion_value(diagonal_pes_expansion, 1, im * frequency) .-
+            value,
+        )
+        for (frequency, value) in
+            zip(matsubara_frequencies, diagonal_matsubara_values)
+    ) < 2e-2
+
     @test PESKernel(n_poles=2, conic_solver=:scs).conic_solver === :scs
     @test_throws ArgumentError PESKernel(n_poles=2, conic_solver=:cosmo)
     @test_throws ArgumentError PESKernel(

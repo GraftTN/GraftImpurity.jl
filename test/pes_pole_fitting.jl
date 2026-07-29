@@ -70,8 +70,52 @@ end
     @test evaluate_poles(matrix_fit, -frequencies[end]) ≈
           evaluate_poles(matrix_fit, frequencies[end])' atol=2e-6
 
+    diagonal_weights = [
+        ComplexF64[0.4 0.0; 0.0 0.7],
+        ComplexF64[0.2 0.0; 0.0 0.5],
+        ComplexF64[0.6 0.0; 0.0 0.3],
+    ]
+    diagonal_values = matrix_samples(
+        poles, diagonal_weights, frequencies, fermion_kernel,
+    )
+    @test GraftImpurity._pes_samples_are_exactly_diagonal(diagonal_values)
+    tiny_offdiagonal_values = copy.(diagonal_values)
+    tiny_offdiagonal_values[1][1, 2] = eps(Float64)
+    tiny_offdiagonal_values[1][2, 1] = eps(Float64)
+    @test !GraftImpurity._pes_samples_are_exactly_diagonal(
+        tiny_offdiagonal_values,
+    )
+    diagonal_fit = pes_fit(
+        diagonal_values, frequencies; n_poles=3, solver=:sdp,
+        conic_solver=:scs, maxiter=0,
+    )
+    @test diagonal_fit.residue_constraint == :psd
+    @test diagonal_fit.diagnostics.final_solver == :sdp
+    @test diagonal_fit.diagnostics.residue_backend == :diagonal_nnls
+    @test diagonal_fit.diagnostics.requested_conic_solver == :scs
+    @test diagonal_fit.diagnostics.used_conic_solver === nothing
+    @test diagonal_fit.diagnostics.sdp_solves == 0
+    @test diagonal_fit.diagnostics.nnls_solves == 2
+    @test diagonal_fit.poles ≈ poles atol=1e-12
+    @test all(weight -> iszero(weight[1, 2]) && iszero(weight[2, 1]),
+              diagonal_fit.weights)
+    @test diagonal_fit.diagnostics.max_abs_error < 2e-14
+
+    diagonal_refined = pes_fit(
+        diagonal_values, frequencies; n_poles=3, solver=:sdp,
+        conic_solver=:scs, maxiter=1,
+    )
+    @test diagonal_refined.diagnostics.residue_backend == :diagonal_nnls
+    @test diagonal_refined.diagnostics.used_conic_solver === nothing
+    @test diagonal_refined.diagnostics.sdp_solves == 0
+    @test diagonal_refined.diagnostics.nnls_solves > 2
+    @test iszero(diagonal_refined.diagnostics.nnls_solves % 2)
+    @test all(weight -> iszero(weight[1, 2]) && iszero(weight[2, 1]),
+              diagonal_refined.weights)
+
     scalar_sdp_fit = pes_fit(values, frequencies; n_poles=3, solver=:sdp)
     @test scalar_sdp_fit.residue_constraint == :psd
+    @test scalar_sdp_fit.diagnostics.residue_backend == :nnls
     @test scalar_sdp_fit.diagnostics.sdp_solves == 0
     @test scalar_sdp_fit.diagnostics.nnls_solves == 1
     @test scalar_sdp_fit.diagnostics.used_conic_solver === nothing
@@ -81,6 +125,7 @@ end
         values, frequencies; n_poles=3, solver=:sdp, conic_solver=:scs)
     @test scalar_scs_request.diagnostics.requested_conic_solver == :scs
     @test scalar_scs_request.diagnostics.used_conic_solver === nothing
+    @test scalar_scs_request.diagnostics.residue_backend == :nnls
     @test scalar_scs_request.diagnostics.nnls_solves == 1
 
     missing_scs = try
