@@ -106,28 +106,32 @@ maintained in the sibling `GraftHarness` repository.
 1. **Matrix-valued Hamiltonian bath** — *implemented; algorithmic basis*
 
    C. Gramsch, K. Balzer, M. Eckstein, and M. Kollar, “Hamiltonian-based impurity solver for nonequilibrium dynamical mean-field theory,” *Physical Review B* **88**, 235106 (2013).
-   [DOI](https://doi.org/10.1103/PhysRevB.88.235106)
+   [DOI](https://doi.org/10.1103/PhysRevB.88.235106) ·
+   [arXiv](https://arxiv.org/abs/1306.6315)
 
    **Provenance:** Basis for matrix-valued Hamiltonian-bath discretization.
 
 2. **FTPS geometry** — *implemented; algorithmic basis*
 
    D. Bauernfeind, M. Zingl, R. Triebl, M. Aichhorn, and H. G. Evertz, “Fork Tensor-Product States: Efficient Multiorbital Real-Time DMFT Solver,” *Physical Review X* **7**, 031013 (2017).
-   [DOI](https://doi.org/10.1103/PhysRevX.7.031013)
+   [DOI](https://doi.org/10.1103/PhysRevX.7.031013) ·
+   [arXiv](https://arxiv.org/abs/1612.05587)
 
    **Provenance:** Basis for FTPS geometry, star-bath discretization, and the residue-factorization convention.
 
 3. **T3NS geometry** — *implemented; algorithmic basis*
 
    K. Gunst, F. Verstraete, S. Wouters, Ö. Legeza, and D. Van Neck, “T3NS: Three-Legged Tree Tensor Network States,” *Journal of Chemical Theory and Computation* **14**, 2026 (2018).
-   [DOI](https://doi.org/10.1021/acs.jctc.8b00098)
+   [DOI](https://doi.org/10.1021/acs.jctc.8b00098) ·
+   [arXiv](https://arxiv.org/abs/1801.09998)
 
    **Provenance:** Basis for the three-legged tree representation.
 
 4. **Cayley-tree bath mapping** — *implemented; algorithmic basis*
 
    B. Zhan, J.-L. Chen, Z. Fan, and T. Xiang, “Tree tensor network impurity solver based on Cayley-tree mapping,” *Physical Review B* **113**, 195144 (2026).
-   [DOI](https://doi.org/10.1103/ycty-d5f9)
+   [DOI](https://doi.org/10.1103/ycty-d5f9) ·
+   [arXiv](https://arxiv.org/abs/2601.17718)
 
    **Provenance:** Basis for scalar Cayley-tree mapping; GraftImpurity extends the realization to number-conserving block baths.
 
@@ -136,7 +140,8 @@ maintained in the sibling `GraftHarness` repository.
 1. **SOC-aware block hybridization** — *implemented; validation reference*
 
    N.-O. Linden, M. Zingl, C. Hubig, O. Parcollet, and U. Schollwöck, “Imaginary-time matrix product state impurity solver in a real material calculation: Spin-orbit coupling in Sr₂RuO₄,” *Physical Review B* **101**, 041101(R) (2020).
-   [DOI](https://doi.org/10.1103/PhysRevB.101.041101)
+   [DOI](https://doi.org/10.1103/PhysRevB.101.041101) ·
+   [arXiv](https://arxiv.org/abs/1909.02503)
 
    **Provenance:** Reference for matrix-valued hybridization and spin-orbit-coupled block structure.
 
@@ -161,7 +166,8 @@ maintained in the sibling `GraftHarness` repository.
 1. **Complex-time Green functions** — *design reference*
 
    M. Grundner, P. Westhoff, F. B. Kugler, O. Parcollet, and U. Schollwöck, “Complex time evolution in tensor networks and time-dependent Green's functions,” *Physical Review B* **109**, 155124 (2024).
-   [DOI](https://doi.org/10.1103/PhysRevB.109.155124)
+   [DOI](https://doi.org/10.1103/PhysRevB.109.155124) ·
+   [arXiv](https://arxiv.org/abs/2312.11705)
 
    **Provenance:** Design reference for complex-time evolution in Green-function calculations.
 
@@ -184,7 +190,15 @@ maintained in the sibling `GraftHarness` repository.
 
    **Note:** We only use this bath fitting method, we still solve the Hamiltonian not hybrid.
 
-4. **Complex-time Krylov augmentation** — *design reference*
+4. **Real-time ESPRIT extrapolation** — *design reference*
+
+   A. Erpenbeck, Y. Zhu, Y. Yu, L. Zhang, R. Gerum, O. Goulko, C. Yang, G. Cohen, and E. Gull, “Compact representation and long-time extrapolation of real-time data for quantum systems using the ESPRIT algorithm,” *Physical Review B* **113**, 115129 (2026).
+   [DOI](https://doi.org/10.1103/8vzv-y74m) ·
+   [arXiv](https://arxiv.org/abs/2506.13760)
+
+   **Provenance:** Design reference for compact exponential representations, denoising, and long-time extrapolation of real-time impurity correlators.
+
+5. **Complex-time Krylov augmentation** — *design reference*
 
    S. Paeckel, “Spectral decomposition and high-accuracy Greens functions: Overcoming the Nyquist-Shannon limit via complex-time Krylov expansion,”
    arXiv:2411.09680 (2024).
@@ -197,12 +211,16 @@ maintained in the sibling `GraftHarness` repository.
 1. **FTPS construction** — *implementation guide*
 
    D. Bauernfeind, *Fork Tensor Product States: Efficient Multi-Orbital Impurity Solver for Dynamical Mean Field Theory*, PhD thesis, Graz University of Technology (2018).
+   [TU Graz repository](https://repository.tugraz.at/publications/qr6jh-ydn21) ·
+   [DOI](https://doi.org/10.3217/qr6jh-ydn21)
 
    **Provenance:** Detailed guide to the FTPS construction.
 
 2. **T3N framework** — *implementation guide*
 
    S. Mardazad, *Simulating real molecules with tensor network techniques*, PhD thesis, LMU Munich (2022).
+   [LMU eDoc](https://edoc.ub.uni-muenchen.de/30195/) ·
+   [DOI](https://doi.org/10.5282/edoc.30195)
 
    **Provenance:** Detailed guide to the T3N framework.
 
@@ -210,6 +228,8 @@ maintained in the sibling `GraftHarness` repository.
 
    M. Grundner, *Tensor Network Impurity Solvers: Simulating Quantum Materials*,
    PhD thesis, LMU Munich (2025).
+   [LMU eDoc](https://edoc.ub.uni-muenchen.de/35102/) ·
+   [DOI](https://doi.org/10.5282/edoc.35102)
 
    **Provenance:** Detailed guide to T3N, FT3N, and MT3N impurity topologies.
 

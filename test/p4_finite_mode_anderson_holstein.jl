@@ -162,6 +162,9 @@ end
         getfield.(plain_data, :value) .- getfield.(ed_data, :value))) < 1e-3
     @test plain_cell.max_bond_dimension > 1
 
+    # TODO(P4): This extended branch validates only the untruncated
+    # pseudo-particle representation. Physical PP-LBO convergence acceptance
+    # remains unfinished and is not covered by the default test tier.
     if GRAFT_EXTENDED_TESTS
         Hpp, topopp, physpp = ppdress(
             model.H, model.topo, model.phys;
