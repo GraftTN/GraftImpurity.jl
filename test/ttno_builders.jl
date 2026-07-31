@@ -5,7 +5,7 @@ using Graft
 using GraftImpurity
 using GreenFunc
 using Graft.Backend: FermionParity, U1Irrep, Vect, SU2Irrep, dim, ⊠
-using Graft.TestUtils: categorical_coordinates, product_ttns, to_dense
+using GraftTestUtils: categorical_coordinates, product_ttns, to_dense
 
 function _ttnob_physical(mounted)
     names = propertynames(mounted.phys)

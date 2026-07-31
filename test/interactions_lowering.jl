@@ -1,7 +1,7 @@
 using Test
 using Graft
 using GraftImpurity
-using Graft.TestUtils: dense_hamiltonian, to_dense, product_ttns
+using GraftTestUtils: dense_hamiltonian, to_dense, product_ttns
 using Graft.Backend: FermionParity, ⊠, U1Irrep
 using LinearAlgebra: diag, norm, Hermitian, eigvals
 

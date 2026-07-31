@@ -1,6 +1,6 @@
 using JLD2
 using Graft
-using Graft.TestUtils
+using GraftTestUtils
 using LinearAlgebra: Hermitian, eigen
 
 # Cross-check against the committed one-time TRIQS CTSEG/pyed reference

@@ -4,7 +4,7 @@ using Random: Xoshiro, randn
 using Graft
 using GraftImpurity
 using Graft.Backend: FermionParity, TensorMap, Vect, ←
-using Graft.TestUtils: categorical_coordinates, random_ttns, to_dense
+using GraftTestUtils: categorical_coordinates, random_ttns, to_dense
 
 function _cayley_delta(coupling::AbstractMatrix{<:Number},
                        bath_hamiltonian::AbstractMatrix{<:Number}, z::Complex)
@@ -126,7 +126,7 @@ function _mounted_ttno_action_columns(mounted::CayleyAndersonBath, operator)
     operator.topo == mounted.topology || throw(ArgumentError(
         "mounted action oracle received an operator on a different topology",
     ))
-    # Graft.TestUtils.to_dense(::TTNO) enumerates product states and evaluates
+    # GraftTestUtils.to_dense(::TTNO) enumerates product states and evaluates
     # categorical `inner(bra, apply(O, ket))` entries. These dedicated 8/16
     # state fixtures keep that exact small-system oracle bounded.
     return to_dense(operator)

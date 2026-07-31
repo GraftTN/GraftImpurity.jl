@@ -1,6 +1,6 @@
 using Graft
 using Graft.Backend: dim, domain
-using Graft.TestUtils
+using GraftTestUtils
 using LinearAlgebra: I
 
 const GRAFT_EXTENDED_TESTS = lowercase(get(ENV, "GRAFT_EXTENDED_TESTS", "false")) in

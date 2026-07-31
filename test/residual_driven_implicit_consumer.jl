@@ -1,7 +1,7 @@
 using Test
 using Graft
 using GraftImpurity
-using Graft.TestUtils: spin_ops
+using Graft: spin_ops
 
 function _residual_driven_consumer_fixture()
     layout = FlavorLayout(

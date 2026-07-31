@@ -2,7 +2,7 @@ using Test
 using Graft
 using GraftImpurity
 using GreenFunc
-using Graft.TestUtils: product_ttns, to_dense
+using GraftTestUtils: product_ttns, to_dense
 using Graft.Backend: FermionParity, U1Irrep, ⊠
 using LinearAlgebra: dot, exp, inv
 

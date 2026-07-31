@@ -1,7 +1,7 @@
 using Test
 using Graft
 using GraftImpurity
-using Graft.TestUtils: to_dense
+using GraftTestUtils: to_dense
 using LinearAlgebra: Hermitian, eigvals
 
 function _m6_ttno_layout()

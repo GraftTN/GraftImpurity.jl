@@ -1,0 +1,19 @@
+[deps]
+Graft = "917c9ffe-6c79-4950-b61c-1fe8fbfdf188"
+GraftImpurity = "05920a16-b046-4d42-a2c4-f5ac0fa0c24c"
+GraftTestUtils = "ca295596-40f3-4873-8d36-314fc3dd78df"
+GreenFunc = "9efc7ea6-d529-4241-ab29-dcf68b94af7c"
+JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+SparseIR = "4fe2279e-80f0-4adb-8463-ee114ff56b7d"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[sources]
+Graft = {path = "../../Graft.jl"}
+GraftImpurity = {path = ".."}
+GraftTestUtils = {path = "../../Graft.jl/lib/GraftTestUtils"}
+
+[compat]
+julia = "1.11"
