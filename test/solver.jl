@@ -346,21 +346,18 @@ end
 
     tilted = ComplexTimeRequest(
         ComplexTimeSegment(-0.02 - 0.05im, 1; label=:tilted);
-        evolver=GlobalKrylov(krylovdim=4, maxiter=10,
-                             fit_nsweeps=1, fit_tol=1e-10),
+        evolver=DirectKrylovBootstrap(krylovdim=4, max_basis=4),
     )
     parallel = ComplexTimeRequest(
         (ComplexTimeSegment(-0.02, 1; label=:parallel_offset),
          ComplexTimeSegment(-0.05im, 1; label=:parallel_real));
-        evolver=GlobalKrylov(krylovdim=4, maxiter=10,
-                             fit_nsweeps=1, fit_tol=1e-10),
+        evolver=DirectKrylovBootstrap(krylovdim=4, max_basis=4),
     )
     kink = ComplexTimeRequest(
         (ComplexTimeSegment(-0.02, 1; label=:kink_imaginary),
          ComplexTimeSegment(-0.05im, 1; label=:kink_real),
          ComplexTimeSegment(-0.01, 1; label=:kink_return));
-        evolver=GlobalKrylov(krylovdim=4, maxiter=10,
-                             fit_nsweeps=1, fit_tol=1e-10),
+        evolver=DirectKrylovBootstrap(krylovdim=4, max_basis=4),
     )
     for (request_value, labels, expected_grid) in (
         (tilted, (:initial, :tilted), ComplexF64[0, -0.02 - 0.05im]),
