@@ -14,6 +14,7 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Graft = {path = "../../Graft.jl"}
 GraftImpurity = {path = ".."}
 GraftTestUtils = {path = "../../Graft.jl/lib/GraftTestUtils"}
+GreenFunc = {path = "../../GreenFunc.jl"}
 
 [compat]
 julia = "1.11"
