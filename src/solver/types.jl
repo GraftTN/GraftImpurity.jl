@@ -616,7 +616,8 @@ end
 """
     Solver(; gf_struct, layout, topology_plan, bath_mapping=nothing, phys=nothing,
            bath_fit_kernel, ops=ImpurityOperators(layout), symmetry=SymmetrySpec(layout),
-           soc=nothing, compression_atol=0, scheme=TruncationScheme())
+           soc=nothing, ttno_builder=LegacyTTNOBuilder(),
+           compression_atol=0, scheme=TruncationScheme())
 
 Stateful breaking impurity-solver owner. `gf_struct` is the exact named
 [`Partition`](@ref), never an inferred collection of arms. Staged mutable
@@ -625,7 +626,8 @@ state so every input replacement can invalidate them atomically.
 """
 mutable struct Solver{L<:FlavorLayout,P<:Partition,K<:AbstractRealPoleBathFitKernel,
                       O<:ImpurityOperators,PH<:NamedTuple,S<:SymmetrySpec,
-                      T<:TruncationScheme} <: AbstractImpuritySolver
+                      B<:AbstractTTNOBuilder,T<:TruncationScheme} <:
+        AbstractImpuritySolver
     gf_struct::P
     layout::L
     topology_plan::Union{Nothing,AbstractImpurityTopologyPlan,TreeTopology}
@@ -635,6 +637,7 @@ mutable struct Solver{L<:FlavorLayout,P<:Partition,K<:AbstractRealPoleBathFitKer
     ops::O
     symmetry::S
     soc::Union{Nothing,ImpurityOneBody}
+    ttno_builder::B
     compression_atol::Float64
     scheme::T
     input_kind::Symbol

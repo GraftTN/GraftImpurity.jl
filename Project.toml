@@ -1,6 +1,6 @@
 name = "GraftImpurity"
 uuid = "05920a16-b046-4d42-a2c4-f5ac0fa0c24c"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["weiyiguo9"]
 license = "Apache-2.0"
 
@@ -22,7 +22,7 @@ GraftImpuritySCSExt = "SCS"
 
 [compat]
 Clarabel = "0.11.1"
-Graft = "0.1"
+Graft = "0.1.1"
 GreenFunc = "0.2"
 JuMP = "1.30.1"
 Optim = "2.2.1"

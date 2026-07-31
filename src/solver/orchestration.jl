@@ -67,7 +67,8 @@ end
 """
     Solver(; gf_struct, layout, topology_plan, bath_mapping=nothing,
            phys=nothing, bath_fit_kernel, ops=ImpurityOperators(layout),
-           symmetry=SymmetrySpec(layout), soc=nothing, compression_atol=0,
+           symmetry=SymmetrySpec(layout), soc=nothing,
+           ttno_builder=LegacyTTNOBuilder(), compression_atol=0,
            scheme=TruncationScheme())
 
 Construct an empty, stateful impurity solver. A fitting input is installed only
@@ -82,10 +83,12 @@ function Solver(; gf_struct::Partition, layout::FlavorLayout,
                 ops::O=ImpurityOperators(layout),
                 symmetry::S=SymmetrySpec(layout),
                 soc::Union{Nothing,ImpurityOneBody}=nothing,
+                ttno_builder::B=LegacyTTNOBuilder(),
                 compression_atol::Real=0.0,
                 scheme::T=TruncationScheme()) where {
                     K<:AbstractRealPoleBathFitKernel,O<:ImpurityOperators,
-                    S<:SymmetrySpec,T<:TruncationScheme}
+                    S<:SymmetrySpec,B<:AbstractTTNOBuilder,
+                    T<:TruncationScheme}
     validate_partition(gf_struct, layout)
     ops.layout == layout || throw(ArgumentError(
         "Solver ImpurityOperators FlavorLayout must match layout",
@@ -102,7 +105,7 @@ function Solver(; gf_struct::Partition, layout::FlavorLayout,
     physical = _solver_physical_manifest(ops, phys)
     return Solver(
         gf_struct, layout, topology_plan, bath_mapping, physical,
-        bath_fit_kernel, ops, symmetry, soc, tolerance, scheme,
+        bath_fit_kernel, ops, symmetry, soc, ttno_builder, tolerance, scheme,
         :unset,
         nothing, # source_input
         nothing, # input
@@ -354,7 +357,8 @@ function _solver_warm_identity(solver::Solver,
     return hash((:GraftImpuritySolverWarmStart, solver.layout, solver.gf_struct,
                  mounted.topology, mounted.diagnostics.ownership_hash, bath_hash,
                  interaction, solver.h_loc0, solver.soc, solver.symmetry,
-                 solver.ops.sector, solver.compression_atol))
+                 solver.ops.sector, solver.ttno_builder,
+                 solver.compression_atol))
 end
 
 function _state_requires_complex_eltype(request::SolveRequest)
@@ -565,6 +569,7 @@ function solve!(solver::Solver, interaction::AbstractImpurityInteraction,
     lowered = lower_hamiltonian(
         mounted, interaction, solver.ops;
         h_loc=h_loc0, soc=solver.soc, symmetry=solver.symmetry,
+        ttno_builder=solver.ttno_builder,
         compression_atol=solver.compression_atol, scheme=solver.scheme,
     )
     identity = _solver_warm_identity(solver, interaction, mounted)

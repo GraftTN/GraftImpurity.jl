@@ -24,6 +24,7 @@ function _residual_driven_consumer_fixture()
         hamiltonian, topology, physical; hermitian=true)
     lowered = LoweredImpurityHamiltonian(
         mounted, interaction, hamiltonian, operator,
+        LegacyTTNOBuilder(), nothing, nothing,
         SymmetryAudit(:certified, (), ()), nothing, (;))
     channel = LocalCorrelator(
         :particle,

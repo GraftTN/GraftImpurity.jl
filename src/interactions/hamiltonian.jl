@@ -1,19 +1,122 @@
 """
+    AbstractTTNOBuilder
+
+Typed policy for constructing the complete impurity TTNO before the mandatory
+compression pipeline. Builder selection is solver-lifetime configuration, not
+part of an individual solve request.
+"""
+abstract type AbstractTTNOBuilder end
+
+"""
+    LegacyTTNOBuilder()
+
+Build through Graft's migration-oracle `ttno_from_opsum` path. This remains the
+default while the compiled path is validated on impurity Hamiltonians.
+"""
+struct LegacyTTNOBuilder <: AbstractTTNOBuilder end
+
+Base.:(==)(::LegacyTTNOBuilder, ::LegacyTTNOBuilder) = true
+Base.isequal(::LegacyTTNOBuilder, ::LegacyTTNOBuilder) = true
+Base.hash(::LegacyTTNOBuilder, seed::UInt) = hash(:LegacyTTNOBuilder, seed)
+
+"""
+    CompiledTTNOBuilder(; lowering=AbelianScalarLowering(),
+                        merge=StateDiagramMerge(SGEOptimizer()))
+
+Build through Graft's typed compiler facade. The lowering and merge kernels are
+part of the policy identity, so `DirectSumMerge()` can serve as an uncompressed
+correctness oracle independently of the optimized StateDiagram kernels.
+"""
+struct CompiledTTNOBuilder{
+        L<:AbstractOperatorLoweringKernel,M<:AbstractTTNOMergeKernel} <:
+        AbstractTTNOBuilder
+    lowering::L
+    merge::M
+end
+
+function CompiledTTNOBuilder(;
+        lowering::AbstractOperatorLoweringKernel=AbelianScalarLowering(),
+        merge::AbstractTTNOMergeKernel=StateDiagramMerge(SGEOptimizer()))
+    return CompiledTTNOBuilder(lowering, merge)
+end
+
+Base.:(==)(left::CompiledTTNOBuilder, right::CompiledTTNOBuilder) =
+    left.lowering == right.lowering && left.merge == right.merge
+Base.isequal(left::CompiledTTNOBuilder, right::CompiledTTNOBuilder) =
+    isequal(left.lowering, right.lowering) && isequal(left.merge, right.merge)
+Base.hash(builder::CompiledTTNOBuilder, seed::UInt) =
+    hash(builder.merge, hash(builder.lowering, hash(:CompiledTTNOBuilder, seed)))
+
+"""
+    TTNOBuilderCapabilityError
+
+Fail-closed compiled-builder error retaining Graft's typed category-capability
+failure while pointing callers to the explicit legacy migration oracle.
+"""
+struct TTNOBuilderCapabilityError{
+        B<:CompiledTTNOBuilder,E<:MissingCategoryCapability} <: Exception
+    builder::B
+    cause::E
+end
+
+function Base.showerror(io::IO, error::TTNOBuilderCapabilityError)
+    print(io, "CompiledTTNOBuilder cannot lower this category profile: ")
+    showerror(io, error.cause)
+    print(io, ". Retry explicitly with LegacyTTNOBuilder().")
+end
+
+"""
+    build_ttno(builder, H, topology, physical; hermitian=false, elt=ComplexF64)
+        -> (operator, build_report_or_nothing, exact_provenance_or_nothing)
+
+Uniform impurity-facing TTNO construction contract. Compiler-certified exact
+provenance is returned when the selected Graft producer can supply it.
+"""
+function build_ttno(::LegacyTTNOBuilder, H::OpSum, topology::TreeTopology,
+                    physical::Dict{Symbol,<:ElementarySpace};
+                    hermitian::Bool=false,
+                    elt::Type{<:Number}=ComplexF64)
+    operator = ttno_from_opsum(H, topology, physical; hermitian, elt)
+    return operator, nothing, nothing
+end
+
+function build_ttno(builder::CompiledTTNOBuilder, H::OpSum,
+                    topology::TreeTopology,
+                    physical::Dict{Symbol,<:ElementarySpace};
+                    hermitian::Bool=false,
+                    elt::Type{<:Number}=ComplexF64)
+    try
+        return compile_ttno(
+            H, topology, physical;
+            lowering=builder.lowering, merge=builder.merge, hermitian, elt,
+        )
+    catch error
+        error isa MissingCategoryCapability || rethrow()
+        throw(TTNOBuilderCapabilityError(builder, error))
+    end
+end
+
+"""
     LoweredImpurityHamiltonian
 
 Concrete output of complete impurity Hamiltonian assembly. `operator` has
 already passed the mandatory abelian exact-rank Graft compression pipeline;
-the uncompressed symbolic `opsum`, symmetry audit, interaction identity, and
-concrete compression report remain available for checkpoint/audit consumers.
+the uncompressed symbolic `opsum`, builder policy, build report, exact build
+provenance, symmetry audit, interaction identity, and concrete compression
+report remain available for checkpoint/audit consumers.
 """
 struct LoweredImpurityHamiltonian{M<:AbstractMountedBath,I<:AbstractImpurityInteraction,
-                                  H<:OpSum,O<:TTNO,A<:SymmetryAudit,R,D<:NamedTuple}
+                                  H<:OpSum,O<:TTNO,B<:AbstractTTNOBuilder,
+                                  R,P,A<:SymmetryAudit,C,D<:NamedTuple}
     mounted::M
     interaction::I
     opsum::H
     operator::O
+    builder::B
+    build_report::R
+    build_provenance::P
     audit::A
-    compression::R
+    compression::C
     diagnostics::D
 end
 
@@ -251,13 +354,17 @@ end
 """
     lower_hamiltonian(mounted, interaction, operators;
                       h_loc=nothing, soc=nothing,
-                      symmetry=SymmetrySpec(...), compression_atol, scheme=TruncationScheme())
+                      symmetry=SymmetrySpec(...),
+                      ttno_builder=LegacyTTNOBuilder(),
+                      compression_atol, scheme=TruncationScheme())
         -> LoweredImpurityHamiltonian
 
 Assemble the complete fermionic Hamiltonian, certify that its typed components
 are Hermitian, audit requested full-Hamiltonian symmetries, construct a Graft
-TTNO, and unconditionally invoke core sector-aware exact-rank compression.
-No interaction-only compression or dense fallback is exposed.
+TTNO through the selected typed builder, and unconditionally invoke core
+sector-aware exact-rank compression. Compiler-certified exact provenance is
+passed into compression when available. No interaction-only compression,
+automatic legacy fallback, or dense fallback is exposed.
 """
 function lower_hamiltonian(mounted::Union{AndersonBath,CayleyAndersonBath},
                            interaction::AbstractImpurityInteraction,
@@ -265,6 +372,7 @@ function lower_hamiltonian(mounted::Union{AndersonBath,CayleyAndersonBath},
                            h_loc::Union{Nothing,ImpurityOneBody}=nothing,
                            soc::Union{Nothing,ImpurityOneBody}=nothing,
                            symmetry::SymmetrySpec=SymmetrySpec(interaction.layout),
+                           ttno_builder::AbstractTTNOBuilder=LegacyTTNOBuilder(),
                            compression_atol::Real,
                            scheme::TruncationScheme=TruncationScheme())
     _validate_lowerable_bath(mounted)
@@ -293,11 +401,15 @@ function lower_hamiltonian(mounted::Union{AndersonBath,CayleyAndersonBath},
     audit = audit_symmetry(H, complete_spec; hermiticity=:certified)
     _require_supported_symmetry(audit)
     physical = _mounted_physical_spaces(mounted)
-    operator = ttno_from_opsum(H, mounted.topology, physical; hermitian=true)
+    operator, build_report, build_provenance = build_ttno(
+        ttno_builder, H, mounted.topology, physical; hermitian=true,
+    )
     report = compress!(operator; sector_aware=true, mode=:exact_rank,
-                       compression_atol=tolerance, scheme)
+                       compression_atol=tolerance, scheme,
+                       provenance=build_provenance)
     return LoweredImpurityHamiltonian(
-        mounted, interaction, H, operator, audit, report,
+        mounted, interaction, H, operator, ttno_builder,
+        build_report, build_provenance, audit, report,
         _hamiltonian_diagnostics(interaction, mounted),
     )
 end
