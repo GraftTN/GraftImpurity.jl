@@ -1,0 +1,31 @@
+[deps]
+GraftEvolution = "c0b0ae67-2c82-4574-a955-8b13fd9a0fd6"
+GraftFoundation = "b817f51d-645c-48d5-8696-150514b96021"
+GraftImpurityValidation = "c9b6821c-9786-4062-96a1-3ad33b52b59d"
+GraftNetworks = "9722b9cb-9502-4464-b3ad-04909505de0f"
+GraftSymbolic = "923ebbca-7fce-40e7-998b-8b588cdf2371"
+GraftTestUtils = "ca295596-40f3-4873-8d36-314fc3dd78df"
+GraftThermal = "5d032ad8-176f-4faa-8fb2-27bb559d27dc"
+JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[sources]
+GraftEvolution = {path = "../../../../Graft.jl/lib/GraftEvolution"}
+GraftFoundation = {path = "../../../../Graft.jl/lib/GraftFoundation"}
+GraftImpurityValidation = {path = ".."}
+GraftNetworks = {path = "../../../../Graft.jl/lib/GraftNetworks"}
+GraftSymbolic = {path = "../../../../Graft.jl/lib/GraftSymbolic"}
+GraftTestUtils = {path = "../../../../Graft.jl/lib/GraftTestUtils"}
+GraftThermal = {path = "../../../../Graft.jl/lib/GraftThermal"}
+
+[compat]
+GraftEvolution = "0.1.1"
+GraftFoundation = "0.1.1"
+GraftImpurityValidation = "0.1.1"
+GraftNetworks = "0.1.1"
+GraftSymbolic = "0.1.1"
+GraftTestUtils = "0.1.1"
+GraftThermal = "0.1.1"
+LinearAlgebra = "1.11"
+julia = "1.11"

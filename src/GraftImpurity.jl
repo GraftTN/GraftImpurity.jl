@@ -18,16 +18,19 @@ cross-checks read the committed JLD2 reference data only.
 """
 module GraftImpurity
 
-using LinearAlgebra: Diagonal, Hermitian, I, diag, dot, eigen, eigvals, norm,
-    opnorm, qr, svd, tr
-import LinearAlgebra
-using Graft
-import GreenFunc
-import Optim
-using Graft.Backend: ElementarySpace, AbstractTensorMap, FermionParity, Vect,
-    U1Space, U1Irrep, TensorMap, dim, ⊠, ⊗, ←
-using Graft.Symbolic: OpSum
-using Graft.Trees: TreeTopology
+using GraftImpurityFoundations
+using GraftImpurityInteractions
+using GraftImpurityBaths
+using GraftImpurityPoleFits
+using GraftImpurityBathFit
+using GraftImpuritySolver
+using GraftImpurityValidation
+
+# Preserve concrete private bindings embedded in pre-split serialized public
+# values. These are aliases to the owner-package types, not compatibility
+# wrappers.
+import GraftImpurityBaths: _MountedHamiltonianCertificate
+import GraftImpurityBathFit: _DMFTMeasureSnapshot, _DMFTPositiveMeasure
 
 export FlavorLayout, flavors, flavor_index, physical_site, site_modes,
     layout_sites, basis_identity,
@@ -103,72 +106,6 @@ export FlavorLayout, flavors, flavor_index, physical_site, site_modes,
     FiniteModeBenchmarkCell, BosonCutoffReport, assess_boson_cutoff,
     RepresentationComparison, compare_representations
 
-include(joinpath(@__DIR__, "foundations", "layout.jl"))
-include(joinpath(@__DIR__, "foundations", "partition.jl"))
-include(joinpath(@__DIR__, "foundations", "abstractions.jl"))
-include(joinpath(@__DIR__, "foundations", "local_fermions.jl"))
-include(joinpath(@__DIR__, "foundations", "nnls.jl"))
-include(joinpath(@__DIR__, "interactions", "types.jl"))
-include(joinpath(@__DIR__, "interactions", "local_monomials.jl"))
-include(joinpath(@__DIR__, "interactions", "lowering.jl"))
-include(joinpath(@__DIR__, "interactions", "one_body.jl"))
-include(joinpath(@__DIR__, "interactions", "rotation.jl"))
-include(joinpath(@__DIR__, "interactions", "symmetry.jl"))
-include(joinpath(@__DIR__, "bath", "parametrizations.jl"))
-include(joinpath(@__DIR__, "bath", "factorization.jl"))
-include(joinpath(@__DIR__, "bath", "complex_poles.jl"))
-include(joinpath(@__DIR__, "bath", "discrete_bath.jl"))
-include(joinpath(@__DIR__, "bath", "mounted_baths.jl"))
-include(joinpath(@__DIR__, "topology", "plans.jl"))
-include(joinpath(@__DIR__, "topology", "builders.jl"))
-include(joinpath(@__DIR__, "bath", "mounting.jl"))
-include(joinpath(@__DIR__, "mapping", "types.jl"))
-include(joinpath(@__DIR__, "mapping", "scalar.jl"))
-include(joinpath(@__DIR__, "mapping", "block.jl"))
-include(joinpath(@__DIR__, "bath", "cayley_mounting.jl"))
-include(joinpath(@__DIR__, "bath", "rotation.jl"))
-include(joinpath(@__DIR__, "fitting", "input.jl"))
-include(joinpath(@__DIR__, "fitting", "bcf_input.jl"))
-include(joinpath(@__DIR__, "fitting", "plans.jl"))
-include(joinpath(@__DIR__, "diagnostics", "health_types.jl"))
-include(joinpath(@__DIR__, "diagnostics", "health_report_types.jl"))
-include(joinpath(@__DIR__, "diagnostics", "types.jl"))
-include(joinpath(@__DIR__, "diagnostics", "reconstruction.jl"))
-include(joinpath(@__DIR__, "diagnostics", "report.jl"))
-include(joinpath(@__DIR__, "fitting", "realization.jl"))
-include(joinpath(@__DIR__, "diagnostics", "audit.jl"))
-include(joinpath(@__DIR__, "diagnostics", "health_residuals.jl"))
-include(joinpath(@__DIR__, "diagnostics", "health_measures.jl"))
-include(joinpath(@__DIR__, "diagnostics", "health_spectral_details.jl"))
-include(joinpath(@__DIR__, "diagnostics", "health_profiles.jl"))
-include(joinpath(@__DIR__, "diagnostics", "health_sensitivity.jl"))
-include(joinpath(@__DIR__, "diagnostics", "health_order_data.jl"))
-include(joinpath(@__DIR__, "diagnostics", "health_analyzer.jl"))
-include(joinpath(@__DIR__, "diagnostics", "health_replicas.jl"))
-include(joinpath(@__DIR__, "diagnostics", "health_runner.jl"))
-include(joinpath(@__DIR__, "diagnostics", "dmft_monitor_types.jl"))
-include(joinpath(@__DIR__, "diagnostics", "dmft_monitor_state.jl"))
-include(joinpath(@__DIR__, "diagnostics", "dmft_monitor_updates.jl"))
-include(joinpath(@__DIR__, "diagnostics", "dmft_monitor_report.jl"))
-include(joinpath(@__DIR__, "fitting", "kernels.jl"))
-include(joinpath(@__DIR__, "fitting", "quadrature.jl"))
-include(joinpath(@__DIR__, "pes_pole_fitting.jl"))
-include(joinpath(@__DIR__, "fitting", "pes_kernel.jl"))
-include(joinpath(@__DIR__, "fitting", "minipole.jl"))
-include(joinpath(@__DIR__, "fitting", "esprit_tau.jl"))
-include(joinpath(@__DIR__, "fitting", "complex_bcf.jl"))
-include(joinpath(@__DIR__, "fitting", "coupling_fit.jl"))
-include(joinpath(@__DIR__, "fitting", "boundary_fit.jl"))
-include(joinpath(@__DIR__, "lorentzian_psd.jl"))
-include(joinpath(@__DIR__, "sparseir_adapter.jl"))
-include(joinpath(@__DIR__, "solver", "hamiltonian.jl"))
-include(joinpath(@__DIR__, "solver", "types.jl"))
-include(joinpath(@__DIR__, "solver", "requests.jl"))
-include(joinpath(@__DIR__, "solver", "orchestration.jl"))
-include(joinpath(@__DIR__, "spectra", "fourier.jl"))
-include(joinpath(@__DIR__, "validation", "finite_mode.jl"))
-include(joinpath(@__DIR__, "validation", "kondo.jl"))
-include(joinpath(@__DIR__, "validation", "benchmarks.jl"))
 include(joinpath(@__DIR__, "precompile.jl"))
 
 end # module GraftImpurity

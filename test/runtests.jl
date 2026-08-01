@@ -1,44 +1,5 @@
 using Test
-using GraftImpurity
 
-const TEST_VERBOSE = lowercase(get(ENV, "GRAFT_TEST_VERBOSE", "false")) in
-    ("1", "true", "yes", "on")
-
-@testset "GraftImpurity.jl" begin
+@testset "GraftImpurity umbrella compatibility" begin
     include(joinpath(@__DIR__, "foundations.jl"))
-    include(joinpath(@__DIR__, "topology_mounting.jl"))
-    include(joinpath(@__DIR__, "interactions_lowering.jl"))
-    include(joinpath(@__DIR__, "onebody_symmetry.jl"))
-    include(joinpath(@__DIR__, "interaction_ttno.jl"))
-    include(joinpath(@__DIR__, "ttno_builders.jl"))
-    include(joinpath(@__DIR__, "solver.jl"))
-    include(joinpath(@__DIR__, "residual_driven_implicit_consumer.jl"))
-    include(joinpath(@__DIR__, "cayley_mapping.jl"))
-    include(joinpath(@__DIR__, "realization.jl"))
-    include(joinpath(@__DIR__, "bathfit_report.jl"))
-    include(joinpath(@__DIR__, "bathfit_health_fixtures.jl"))
-    include(joinpath(@__DIR__, "bathfit_health_scalar.jl"))
-    include(joinpath(@__DIR__, "bathfit_health_sensitivity.jl"))
-    include(joinpath(@__DIR__, "bathfit_health_matrix.jl"))
-    include(joinpath(@__DIR__, "bathfit_health_statistics.jl"))
-    include(joinpath(@__DIR__, "bathfit_health_profiles.jl"))
-    include(joinpath(@__DIR__, "bathfit_health_spectral_details.jl"))
-    include(joinpath(@__DIR__, "bathfit_health_integration.jl"))
-    include(joinpath(@__DIR__, "bathfit_health_regressions.jl"))
-    include(joinpath(@__DIR__, "bathfit_runner.jl"))
-    include(joinpath(@__DIR__, "dmft_monitor.jl"))
-    include(joinpath(@__DIR__, "real_pole_kernels.jl"))
-    include(joinpath(@__DIR__, "complex_poles.jl"))
-    include(joinpath(@__DIR__, "coupling_fit.jl"))
-    include(joinpath(@__DIR__, "esprit_tau.jl"))
-    include(joinpath(@__DIR__, "pes_pole_fitting.jl"))
-    include(joinpath(@__DIR__, "lorentzian_psd.jl"))
-    include(joinpath(@__DIR__, "sparseir_adapter.jl"))
-    include(joinpath(@__DIR__, "matsubara.jl"))
-    include(joinpath(@__DIR__, "finite_mode_action.jl"))
-    include(joinpath(@__DIR__, "kondo_scaling.jl"))
-    include(joinpath(@__DIR__, "m2_metal_bath_gtau.jl"))
-    include(joinpath(@__DIR__, "finite_mode_benchmark.jl"))
-    include(joinpath(@__DIR__, "p4_finite_mode_anderson_holstein.jl"))
-    include(joinpath(@__DIR__, "ctseg_reference.jl"))
 end

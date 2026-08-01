@@ -1,0 +1,31 @@
+[deps]
+GraftFoundation = "b817f51d-645c-48d5-8696-150514b96021"
+GraftImpurityBathFit = "e3ae8f75-a118-47e7-8672-9ebafe45b6d5"
+GraftImpurityBaths = "5c03999c-56bc-4780-9d5e-8bfeabf3ad62"
+GraftImpurityFoundations = "3c703997-107e-47af-a3a4-2068413d67cf"
+GraftSpectral = "820719f9-8ca8-4bd9-8c80-731fd33f18ce"
+GreenFunc = "9efc7ea6-d529-4241-ab29-dcf68b94af7c"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+SparseIR = "4fe2279e-80f0-4adb-8463-ee114ff56b7d"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[sources]
+GraftFoundation = {path = "../../../../Graft.jl/lib/GraftFoundation"}
+GraftImpurityBathFit = {path = ".."}
+GraftImpurityBaths = {path = "../../GraftImpurityBaths"}
+GraftImpurityFoundations = {path = "../../GraftImpurityFoundations"}
+GraftSpectral = {path = "../../../../Graft.jl/lib/GraftSpectral"}
+GreenFunc = {path = "../../../../GreenFunc.jl"}
+
+[compat]
+GraftFoundation = "0.1.1"
+GraftImpurityBathFit = "0.1.1"
+GraftImpurityBaths = "0.1.1"
+GraftImpurityFoundations = "0.1.1"
+GraftSpectral = "0.1.1"
+GreenFunc = "0.2"
+LinearAlgebra = "1.11"
+Random = "1.11"
+SparseIR = "2.1.2"
+julia = "1.11"

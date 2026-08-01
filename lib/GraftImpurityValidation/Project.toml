@@ -1,0 +1,17 @@
+name = "GraftImpurityValidation"
+uuid = "c9b6821c-9786-4062-96a1-3ad33b52b59d"
+authors = ["weiyiguo9"]
+license = "Apache-2.0"
+version = "0.1.1"
+
+[deps]
+GraftEvolution = "c0b0ae67-2c82-4574-a955-8b13fd9a0fd6"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+
+[sources]
+GraftEvolution = {path = "../../../Graft.jl/lib/GraftEvolution"}
+
+[compat]
+GraftEvolution = "0.1.1"
+LinearAlgebra = "1.11"
+julia = "1.11"

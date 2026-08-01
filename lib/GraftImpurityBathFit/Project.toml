@@ -1,0 +1,32 @@
+name = "GraftImpurityBathFit"
+uuid = "e3ae8f75-a118-47e7-8672-9ebafe45b6d5"
+authors = ["weiyiguo9"]
+license = "Apache-2.0"
+version = "0.1.1"
+
+[deps]
+GraftImpurityBaths = "5c03999c-56bc-4780-9d5e-8bfeabf3ad62"
+GraftImpurityFoundations = "3c703997-107e-47af-a3a4-2068413d67cf"
+GraftImpurityPoleFits = "bc763d54-c6dc-4f25-bb71-83535c88eea5"
+GraftSpectral = "820719f9-8ca8-4bd9-8c80-731fd33f18ce"
+GreenFunc = "9efc7ea6-d529-4241-ab29-dcf68b94af7c"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Optim = "429524aa-4258-5aef-a3af-852621145aeb"
+SparseIR = "4fe2279e-80f0-4adb-8463-ee114ff56b7d"
+
+[sources]
+GraftImpurityBaths = {path = "../GraftImpurityBaths"}
+GraftImpurityFoundations = {path = "../GraftImpurityFoundations"}
+GraftImpurityPoleFits = {path = "../GraftImpurityPoleFits"}
+GraftSpectral = {path = "../../../Graft.jl/lib/GraftSpectral"}
+GreenFunc = {path = "../../../GreenFunc.jl"}
+
+[compat]
+GraftImpurityBaths = "0.1.1"
+GraftImpurityFoundations = "0.1.1"
+GraftImpurityPoleFits = "0.1.1"
+GraftSpectral = "0.1.1"
+GreenFunc = "0.2"
+Optim = "2.2.1"
+SparseIR = "2.1.2"
+julia = "1.11"

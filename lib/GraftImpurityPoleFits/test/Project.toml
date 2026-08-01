@@ -1,0 +1,14 @@
+[deps]
+GraftImpurityFoundations = "3c703997-107e-47af-a3a4-2068413d67cf"
+GraftImpurityPoleFits = "bc763d54-c6dc-4f25-bb71-83535c88eea5"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[sources]
+GraftImpurityFoundations = {path = "../../GraftImpurityFoundations"}
+GraftImpurityPoleFits = {path = ".."}
+
+[compat]
+GraftImpurityFoundations = "0.1.1"
+GraftImpurityPoleFits = "0.1.1"
+julia = "1.11"

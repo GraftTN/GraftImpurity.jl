@@ -305,7 +305,8 @@ function main()
         Float64, get(ENV, "GRAFT_P4_TARGET_UNCERTAINTY",
                      full ? "1e-3" : "5e-2"))
     ctseg_reference = get(ENV, "GRAFT_CTSEG_REFERENCE_JLD2",
-        joinpath(@__DIR__, "..", "test", "data",
+        joinpath(@__DIR__, "..", "lib", "GraftImpurityValidation",
+                 "test", "data",
                  "ctseg_pyed_reference.jld2"))
 
     cells = FiniteModeBenchmarkCell[]

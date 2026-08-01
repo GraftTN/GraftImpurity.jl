@@ -1,20 +1,28 @@
 [deps]
-Graft = "917c9ffe-6c79-4950-b61c-1fe8fbfdf188"
 GraftImpurity = "05920a16-b046-4d42-a2c4-f5ac0fa0c24c"
-GraftTestUtils = "ca295596-40f3-4873-8d36-314fc3dd78df"
-GreenFunc = "9efc7ea6-d529-4241-ab29-dcf68b94af7c"
+GraftImpurityBathFit = "e3ae8f75-a118-47e7-8672-9ebafe45b6d5"
+GraftImpurityBaths = "5c03999c-56bc-4780-9d5e-8bfeabf3ad62"
+GraftImpurityFoundations = "3c703997-107e-47af-a3a4-2068413d67cf"
+GraftImpurityInteractions = "ff38f452-5450-47a1-bb7b-3484d76418db"
+GraftImpurityPoleFits = "bc763d54-c6dc-4f25-bb71-83535c88eea5"
+GraftImpuritySolver = "671ba014-2ccc-4013-b4e5-eebb41b7846b"
+GraftImpurityValidation = "c9b6821c-9786-4062-96a1-3ad33b52b59d"
+GraftStateDiagram = "13d62100-4025-43ba-bfff-5935242a45be"
+GraftTTNOBuild = "733c6fe2-fcce-4f2b-b032-39dffcf60a1e"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
-LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
-Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
-SparseIR = "4fe2279e-80f0-4adb-8463-ee114ff56b7d"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [sources]
-Graft = {path = "../../Graft.jl"}
 GraftImpurity = {path = ".."}
-GraftTestUtils = {path = "../../Graft.jl/lib/GraftTestUtils"}
-GreenFunc = {path = "../../GreenFunc.jl"}
+GraftImpurityBathFit = {path = "../lib/GraftImpurityBathFit"}
+GraftImpurityBaths = {path = "../lib/GraftImpurityBaths"}
+GraftImpurityFoundations = {path = "../lib/GraftImpurityFoundations"}
+GraftImpurityInteractions = {path = "../lib/GraftImpurityInteractions"}
+GraftImpurityPoleFits = {path = "../lib/GraftImpurityPoleFits"}
+GraftImpuritySolver = {path = "../lib/GraftImpuritySolver"}
+GraftImpurityValidation = {path = "../lib/GraftImpurityValidation"}
+GraftStateDiagram = {path = "../../Graft.jl/lib/GraftStateDiagram"}
+GraftTTNOBuild = {path = "../../Graft.jl/lib/GraftTTNOBuild"}
 
 [compat]
 julia = "1.11"

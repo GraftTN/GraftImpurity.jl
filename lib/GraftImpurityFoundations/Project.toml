@@ -1,0 +1,16 @@
+name = "GraftImpurityFoundations"
+uuid = "3c703997-107e-47af-a3a4-2068413d67cf"
+authors = ["weiyiguo9"]
+license = "Apache-2.0"
+version = "0.1.1"
+
+[deps]
+GraftFoundation = "b817f51d-645c-48d5-8696-150514b96021"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+
+[sources]
+GraftFoundation = {path = "../../../Graft.jl/lib/GraftFoundation"}
+
+[compat]
+GraftFoundation = "0.1.1"
+julia = "1.11"

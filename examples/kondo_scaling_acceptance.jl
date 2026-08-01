@@ -159,7 +159,8 @@ function acceptance_bath(full)
     jld2 = Base.require(Base.PkgId(
         Base.UUID("033835bb-8acc-5ee8-8aae-3f567f8a3819"), "JLD2"))
     default_path = normpath(joinpath(
-        @__DIR__, "..", "test", "data", "kondo_semicircular_bath_29.jld2"))
+        @__DIR__, "..", "lib", "GraftImpurityValidation",
+        "test", "data", "kondo_semicircular_bath_29.jld2"))
     path = get(ENV, "GRAFT_KONDO_BATH_JLD2", default_path)
     artifact = jld2.load(path)["artifact"]
     energies, couplings = artifact.energies, artifact.couplings

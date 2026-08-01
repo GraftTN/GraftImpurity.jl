@@ -1,0 +1,56 @@
+name = "GraftImpuritySolver"
+uuid = "671ba014-2ccc-4013-b4e5-eebb41b7846b"
+authors = ["weiyiguo9"]
+license = "Apache-2.0"
+version = "0.1.1"
+
+[deps]
+GraftContractions = "4d48fc77-7b13-40f5-b575-37e15910179b"
+GraftEvolution = "c0b0ae67-2c82-4574-a955-8b13fd9a0fd6"
+GraftFoundation = "b817f51d-645c-48d5-8696-150514b96021"
+GraftGroundState = "3f84161c-7b72-40cd-aa05-f10ba8a65234"
+GraftImpurityBathFit = "e3ae8f75-a118-47e7-8672-9ebafe45b6d5"
+GraftImpurityBaths = "5c03999c-56bc-4780-9d5e-8bfeabf3ad62"
+GraftImpurityFoundations = "3c703997-107e-47af-a3a4-2068413d67cf"
+GraftImpurityInteractions = "ff38f452-5450-47a1-bb7b-3484d76418db"
+GraftNetworks = "9722b9cb-9502-4464-b3ad-04909505de0f"
+GraftStateDiagram = "13d62100-4025-43ba-bfff-5935242a45be"
+GraftSymbolic = "923ebbca-7fce-40e7-998b-8b588cdf2371"
+GraftTTNOBuild = "733c6fe2-fcce-4f2b-b032-39dffcf60a1e"
+GraftThermal = "5d032ad8-176f-4faa-8fb2-27bb559d27dc"
+GreenFunc = "9efc7ea6-d529-4241-ab29-dcf68b94af7c"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+
+[sources]
+GraftContractions = {path = "../../../Graft.jl/lib/GraftContractions"}
+GraftEvolution = {path = "../../../Graft.jl/lib/GraftEvolution"}
+GraftFoundation = {path = "../../../Graft.jl/lib/GraftFoundation"}
+GraftGroundState = {path = "../../../Graft.jl/lib/GraftGroundState"}
+GraftImpurityBathFit = {path = "../GraftImpurityBathFit"}
+GraftImpurityBaths = {path = "../GraftImpurityBaths"}
+GraftImpurityFoundations = {path = "../GraftImpurityFoundations"}
+GraftImpurityInteractions = {path = "../GraftImpurityInteractions"}
+GraftNetworks = {path = "../../../Graft.jl/lib/GraftNetworks"}
+GraftStateDiagram = {path = "../../../Graft.jl/lib/GraftStateDiagram"}
+GraftSymbolic = {path = "../../../Graft.jl/lib/GraftSymbolic"}
+GraftTTNOBuild = {path = "../../../Graft.jl/lib/GraftTTNOBuild"}
+GraftThermal = {path = "../../../Graft.jl/lib/GraftThermal"}
+GreenFunc = {path = "../../../GreenFunc.jl"}
+
+[compat]
+GraftContractions = "0.1.1"
+GraftEvolution = "0.1.1"
+GraftFoundation = "0.1.1"
+GraftGroundState = "0.1.1"
+GraftImpurityBathFit = "0.1.1"
+GraftImpurityBaths = "0.1.1"
+GraftImpurityFoundations = "0.1.1"
+GraftImpurityInteractions = "0.1.1"
+GraftNetworks = "0.1.1"
+GraftStateDiagram = "0.1.1"
+GraftSymbolic = "0.1.1"
+GraftTTNOBuild = "0.1.1"
+GraftThermal = "0.1.1"
+GreenFunc = "0.2"
+LinearAlgebra = "1.11"
+julia = "1.11"

@@ -1,0 +1,13 @@
+[deps]
+GraftImpurityPoleFits = "bc763d54-c6dc-4f25-bb71-83535c88eea5"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+SCS = "c946c3f1-0d1f-5ce8-9dea-7daa1f7e2d13"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[sources]
+GraftImpurityPoleFits = {path = "../.."}
+
+[compat]
+GraftImpurityPoleFits = "0.1.1"
+SCS = "2.6"
+julia = "1.11"
