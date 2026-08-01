@@ -1,22 +1,5 @@
 abstract type AbstractBathFitReport end
 
-"""
-    PoleBinDiagnostic
-
-Numerical evidence for one raw pole residue at the common realization gate.
-The original expansion is never changed to make this diagnostic pass.
-"""
-struct PoleBinDiagnostic
-    pole_index::Int
-    block::Symbol
-    hermiticity_error::Float64
-    minimum_eigenvalue::Float64
-    tolerance::Float64
-    pivots::Vector{Float64}
-    reconstruction_error::Float64
-    status::Symbol
-end
-
 """Uniform full-grid residual measures for one named hybridization block."""
 struct BathFitResidual
     absolute::Float64
