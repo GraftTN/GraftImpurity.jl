@@ -10,6 +10,29 @@ function GraftImpurityFoundations.real_pole_bath_fit(
     return input, block_names(partition)
 end
 
+struct ExternalRequest <: AbstractImpuritySolveRequest
+    value::Int
+end
+
+struct ExternalResult <: AbstractImpuritySolveResult
+    value::Int
+end
+
+mutable struct ExternalSolver <: AbstractImpuritySolver
+    result::Union{Nothing, ExternalResult}
+end
+
+ExternalSolver() = ExternalSolver(nothing)
+
+function GraftImpurityFoundations.solve!(
+        solver::ExternalSolver, interaction::Int, request::ExternalRequest;
+        initial_state::Union{Nothing, Int}=nothing)
+    state_offset = isnothing(initial_state) ? 0 : initial_state
+    result = ExternalResult(interaction + request.value + state_offset)
+    solver.result = result
+    return result
+end
+
 function local_matrix(operator)
     array = convert(Array, operator)
     return ndims(array) == 2 ? Matrix{ComplexF64}(array) :
@@ -51,6 +74,29 @@ end
     @test_throws ArgumentError validate_partition(
         Partition(:down => [:down], :up => [:up]), layout,
     )
+end
+
+@testset "external impurity solver protocol" begin
+    @test AbstractImpuritySolver ===
+        GraftImpurityFoundations.AbstractImpuritySolver
+    @test AbstractImpuritySolveRequest ===
+        GraftImpurityFoundations.AbstractImpuritySolveRequest
+    @test AbstractImpuritySolveResult ===
+        GraftImpurityFoundations.AbstractImpuritySolveResult
+    @test solve! === GraftImpurityFoundations.solve!
+    @test set_weiss! === GraftImpurityFoundations.set_weiss!
+    @test set_hybridization! === GraftImpurityFoundations.set_hybridization!
+    @test ExternalSolver <: AbstractImpuritySolver
+    @test ExternalRequest <: AbstractImpuritySolveRequest
+    @test ExternalResult <: AbstractImpuritySolveResult
+
+    solver = ExternalSolver()
+    result = solve!(solver, 7, ExternalRequest(11); initial_state=13)
+    @test result == ExternalResult(31)
+    @test solver.result === result
+
+    loaded = Set(pkgid.name for pkgid in keys(Base.loaded_modules))
+    @test "GraftImpuritySolver" ∉ loaded
 end
 
 @testset "generic identity and local fermions" begin

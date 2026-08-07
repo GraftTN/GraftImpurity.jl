@@ -370,8 +370,8 @@ function _ttnob_solver(builder=nothing)
         compression_atol=1e-12,
     )
     solver = builder === nothing ?
-        Solver(; arguments...) :
-        Solver(; arguments..., ttno_builder=builder)
+        TTNSSolver(; arguments...) :
+        TTNSSolver(; arguments..., ttno_builder=builder)
     mesh = ImFreq(8.0, true; grid=[-2, -1, 0, 1, 2])
     delta = Gf(
         mesh;
@@ -395,7 +395,7 @@ function _ttnob_solver(builder=nothing)
     return solver, layout, initial
 end
 
-@testset "Solver TTNO builder identity is warm-start relevant" begin
+@testset "TTNSSolver TTNO builder identity is warm-start relevant" begin
     explicit_builder = CompiledTTNOBuilder(merge=DirectSumMerge())
     default_solver, default_layout, default_initial = _ttnob_solver()
     explicit_solver, explicit_layout, explicit_initial =
@@ -403,7 +403,7 @@ end
     @test default_solver.ttno_builder isa LegacyTTNOBuilder
     @test explicit_solver.ttno_builder == explicit_builder
 
-    request = SolveRequest(; ground_state=GroundStateRequest(
+    request = TTNSSolveRequest(; ground_state=GroundStateRequest(
         trunc=TruncationScheme(maxdim=4),
         nsweeps=1,
         tolerance=1e-10,

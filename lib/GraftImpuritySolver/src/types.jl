@@ -31,7 +31,7 @@ end
     GroundStateRequest(; trunc=TruncationScheme(), nsweeps=10,
                        tolerance=1e-10, krylovdim=20, verbose=false)
 
-Concrete ground-state stage for [`SolveRequest`](@ref). The current production
+Concrete ground-state stage for [`TTNSSolveRequest`](@ref). The current production
 path uses Graft's adaptive two-site DMRG, so its truncation policy is an
 explicit request value rather than hidden solver state.
 """
@@ -251,7 +251,7 @@ end
 """
     LocalObservable(name, insertion)
 
-One named local expectation value in a [`SolveRequest`](@ref). It is separate
+One named local expectation value in a [`TTNSSolveRequest`](@ref). It is separate
 from a two-insertion [`LocalCorrelator`](@ref), so results cannot mislabel a
 raw correlator as an assembled Green function.
 """
@@ -387,7 +387,7 @@ end
 function _require_observable_values(observables::NamedTuple)
     all(value -> value isa Number && isfinite(real(value)) && isfinite(imag(value)),
         values(observables)) || throw(ArgumentError(
-            "ImpurityResult observables must be finite numeric values",
+            "TTNSSolveResult observables must be finite numeric values",
         ))
     return observables
 end
@@ -412,21 +412,19 @@ function ImaginaryTimeResult(temperature::FiniteTemperature,
     return ImaginaryTimeResult(temperature, trajectory, correlators, Val(:validated))
 end
 
-abstract type AbstractSolveRequest end
-
 """
-    SolveRequest(; ground_state=GroundStateRequest(), real_time=nothing,
-                 imaginary_time=nothing, complex_time=nothing,
-                 observables=(), correlators=())
+    TTNSSolveRequest(; ground_state=GroundStateRequest(), real_time=nothing,
+                     imaginary_time=nothing, complex_time=nothing,
+                     observables=(), correlators=())
 
 Typed execution request. Every time-domain route consumes the same explicit
 local correlator channels; a time route without a channel is rejected rather
 than producing an ambiguous empty data product.
 """
-struct SolveRequest{G<:GroundStateRequest,R<:Union{Nothing,RealTimeRequest},
-                    I<:Union{Nothing,ImaginaryTimeRequest},
-                    C<:Union{Nothing,ComplexTimeRequest},O<:Tuple,K<:Tuple} <:
-        AbstractSolveRequest
+struct TTNSSolveRequest{G<:GroundStateRequest,R<:Union{Nothing,RealTimeRequest},
+                        I<:Union{Nothing,ImaginaryTimeRequest},
+                        C<:Union{Nothing,ComplexTimeRequest},O<:Tuple,K<:Tuple} <:
+        AbstractImpuritySolveRequest
     ground_state::G
     real_time::R
     imaginary_time::I
@@ -434,13 +432,13 @@ struct SolveRequest{G<:GroundStateRequest,R<:Union{Nothing,RealTimeRequest},
     observables::O
     correlators::K
 
-    function SolveRequest(ground_state::G, real_time::R, imaginary_time::I,
-                          complex_time::C, observables::O, correlators::K,
-                          ::Val{:validated}) where {
-                              G<:GroundStateRequest,
-                              R<:Union{Nothing,RealTimeRequest},
-                              I<:Union{Nothing,ImaginaryTimeRequest},
-                              C<:Union{Nothing,ComplexTimeRequest},O<:Tuple,K<:Tuple}
+    function TTNSSolveRequest(ground_state::G, real_time::R, imaginary_time::I,
+                              complex_time::C, observables::O, correlators::K,
+                              ::Val{:validated}) where {
+                                  G<:GroundStateRequest,
+                                  R<:Union{Nothing,RealTimeRequest},
+                                  I<:Union{Nothing,ImaginaryTimeRequest},
+                                  C<:Union{Nothing,ComplexTimeRequest},O<:Tuple,K<:Tuple}
         new{G,R,I,C,O,K}(ground_state, real_time, imaginary_time, complex_time,
                          observables, correlators)
     end
@@ -456,45 +454,44 @@ function _validated_named_values(values, expected, name::AbstractString)
     return canonical
 end
 
-function SolveRequest(; ground_state::GroundStateRequest=GroundStateRequest(),
-                      real_time=nothing, imaginary_time=nothing,
-                      complex_time=nothing, observables=(), correlators=())
+function TTNSSolveRequest(; ground_state::GroundStateRequest=GroundStateRequest(),
+                          real_time=nothing, imaginary_time=nothing,
+                          complex_time=nothing, observables=(), correlators=())
     real_time === nothing || real_time isa RealTimeRequest || throw(ArgumentError(
-        "SolveRequest real_time must be nothing or RealTimeRequest",
+        "TTNSSolveRequest real_time must be nothing or RealTimeRequest",
     ))
     imaginary_time === nothing || imaginary_time isa ImaginaryTimeRequest ||
         throw(ArgumentError(
-            "SolveRequest imaginary_time must be nothing or ImaginaryTimeRequest",
+            "TTNSSolveRequest imaginary_time must be nothing or ImaginaryTimeRequest",
         ))
     complex_time === nothing || complex_time isa ComplexTimeRequest ||
         throw(ArgumentError(
-            "SolveRequest complex_time must be nothing or ComplexTimeRequest",
+            "TTNSSolveRequest complex_time must be nothing or ComplexTimeRequest",
         ))
     observable_values = _validated_named_values(observables, LocalObservable,
-                                                 "SolveRequest observables")
+                                                 "TTNSSolveRequest observables")
     channel_values = _validated_named_values(correlators, LocalCorrelator,
-                                              "SolveRequest correlators")
+                                              "TTNSSolveRequest correlators")
     any_time = real_time !== nothing || imaginary_time !== nothing ||
                complex_time !== nothing
     !any_time || !isempty(channel_values) || throw(ArgumentError(
-        "SolveRequest time-domain requests need at least one LocalCorrelator",
+        "TTNSSolveRequest time-domain requests need at least one LocalCorrelator",
     ))
-    return SolveRequest(ground_state, real_time, imaginary_time, complex_time,
-                        observable_values, channel_values, Val(:validated))
+    return TTNSSolveRequest(ground_state, real_time, imaginary_time, complex_time,
+                            observable_values, channel_values, Val(:validated))
 end
 
-abstract type AbstractImpurityResult end
-
 """
-    NonMountableImpurityResult
+    TTNSNonMountableSolveResult
 
 Typed terminal solver result for a fit that cannot become a Hamiltonian bath.
 The original expansion and realization diagnostics remain available; no
 diagonal-only fallback or partially mounted Hamiltonian is produced.
 """
-struct NonMountableImpurityResult{SI<:BathFitInput,I<:BathFitInput,E<:PoleExpansion,
-                                  N<:NonMountablePoleFit,A<:BathFitAudit,
-                                  Q<:SolveRequest} <: AbstractImpurityResult
+struct TTNSNonMountableSolveResult{SI<:BathFitInput,I<:BathFitInput,
+                                   E<:PoleExpansion,N<:NonMountablePoleFit,
+                                   A<:BathFitAudit,Q<:TTNSSolveRequest} <:
+        AbstractImpuritySolveResult
     source_input::SI
     input_kind::Symbol
     h_loc0::ImpurityOneBody
@@ -504,48 +501,50 @@ struct NonMountableImpurityResult{SI<:BathFitInput,I<:BathFitInput,E<:PoleExpans
     bathfit_audit::A
     request::Q
 
-    function NonMountableImpurityResult(source_input::SI, input_kind::Symbol,
-                                        h_loc0::ImpurityOneBody, input::I,
-                                        expansion::E, discretization::N,
-                                        bathfit_audit::A, request::Q,
-                                        ::Val{:validated}) where {
-                                            SI<:BathFitInput,I<:BathFitInput,
-                                            E<:PoleExpansion,N<:NonMountablePoleFit,
-                                            A<:BathFitAudit,Q<:SolveRequest}
+    function TTNSNonMountableSolveResult(source_input::SI, input_kind::Symbol,
+                                         h_loc0::ImpurityOneBody, input::I,
+                                         expansion::E, discretization::N,
+                                         bathfit_audit::A, request::Q,
+                                         ::Val{:validated}) where {
+                                             SI<:BathFitInput,I<:BathFitInput,
+                                             E<:PoleExpansion,N<:NonMountablePoleFit,
+                                             A<:BathFitAudit,Q<:TTNSSolveRequest}
         new{SI,I,E,N,A,Q}(source_input, input_kind, h_loc0, input, expansion,
                           discretization, bathfit_audit, request)
     end
 end
 
-function NonMountableImpurityResult(source_input::BathFitInput, input_kind::Symbol,
-                                    h_loc0::ImpurityOneBody, input::BathFitInput,
-                                    expansion::PoleExpansion,
-                                    discretization::NonMountablePoleFit,
-                                    bathfit_audit::BathFitAudit,
-                                    request::SolveRequest)
+function TTNSNonMountableSolveResult(source_input::BathFitInput,
+                                     input_kind::Symbol,
+                                     h_loc0::ImpurityOneBody,
+                                     input::BathFitInput,
+                                     expansion::PoleExpansion,
+                                     discretization::NonMountablePoleFit,
+                                     bathfit_audit::BathFitAudit,
+                                     request::TTNSSolveRequest)
     input_kind in (:weiss, :hybridization) || throw(ArgumentError(
-        "NonMountableImpurityResult input_kind must be :weiss or :hybridization",
+        "TTNSNonMountableSolveResult input_kind must be :weiss or :hybridization",
     ))
-    return NonMountableImpurityResult(
+    return TTNSNonMountableSolveResult(
         source_input, input_kind, h_loc0, input, expansion, discretization,
         bathfit_audit, request, Val(:validated),
     )
 end
 
 """
-    ImpurityResult
+    TTNSSolveResult
 
 Complete successful solver lifecycle output. It keeps input, fit/realization
 evidence, mounted bath, lowered TTNO/compression report, ground state, static
 observables, and each raw contour-labelled correlator category distinct.
 """
-struct ImpurityResult{SI<:BathFitInput,I<:BathFitInput,E<:PoleExpansion,
-                      D<:DiscretizationResult,
-                      M<:AbstractMountedBath,H<:LoweredImpurityHamiltonian,
-                      G<:GroundStateResult,O<:NamedTuple,R<:NamedTuple,
-                      IT<:Union{Nothing,ImaginaryTimeResult},C<:NamedTuple,
-                      A<:BathFitAudit,Q<:SolveRequest} <:
-        AbstractImpurityResult
+struct TTNSSolveResult{SI<:BathFitInput,I<:BathFitInput,E<:PoleExpansion,
+                       D<:DiscretizationResult,
+                       M<:AbstractMountedBath,H<:LoweredImpurityHamiltonian,
+                       G<:GroundStateResult,O<:NamedTuple,R<:NamedTuple,
+                       IT<:Union{Nothing,ImaginaryTimeResult},C<:NamedTuple,
+                       A<:BathFitAudit,Q<:TTNSSolveRequest} <:
+        AbstractImpuritySolveResult
     source_input::SI
     input_kind::Symbol
     h_loc0::ImpurityOneBody
@@ -564,19 +563,19 @@ struct ImpurityResult{SI<:BathFitInput,I<:BathFitInput,E<:PoleExpansion,
     request::Q
     warm_identity::UInt
 
-    function ImpurityResult(source_input::SI, input_kind::Symbol,
-                            h_loc0::ImpurityOneBody, input::I, expansion::E,
-                            discretization::D, bathfit_audit::A, mounted::M,
-                            lowered::H, ground_state::G, energy::Float64,
-                            observables::O, real_time::R, imaginary_time::IT,
-                            complex_time::C, request::Q, warm_identity::UInt,
-                            ::Val{:validated}) where {
-                                SI<:BathFitInput,I<:BathFitInput,E<:PoleExpansion,
-                                D<:DiscretizationResult,M<:AbstractMountedBath,
-                                H<:LoweredImpurityHamiltonian,G<:GroundStateResult,
-                                O<:NamedTuple,R<:NamedTuple,
-                                IT<:Union{Nothing,ImaginaryTimeResult},C<:NamedTuple,
-                                A<:BathFitAudit,Q<:SolveRequest}
+    function TTNSSolveResult(source_input::SI, input_kind::Symbol,
+                             h_loc0::ImpurityOneBody, input::I, expansion::E,
+                             discretization::D, bathfit_audit::A, mounted::M,
+                             lowered::H, ground_state::G, energy::Float64,
+                             observables::O, real_time::R, imaginary_time::IT,
+                             complex_time::C, request::Q, warm_identity::UInt,
+                             ::Val{:validated}) where {
+                                 SI<:BathFitInput,I<:BathFitInput,E<:PoleExpansion,
+                                 D<:DiscretizationResult,M<:AbstractMountedBath,
+                                 H<:LoweredImpurityHamiltonian,G<:GroundStateResult,
+                                 O<:NamedTuple,R<:NamedTuple,
+                                 IT<:Union{Nothing,ImaginaryTimeResult},C<:NamedTuple,
+                                 A<:BathFitAudit,Q<:TTNSSolveRequest}
         new{SI,I,E,D,M,H,G,O,R,IT,C,A,Q}(
             source_input, input_kind, h_loc0, input, expansion, discretization,
             bathfit_audit, mounted, lowered, ground_state, energy, observables,
@@ -585,27 +584,29 @@ struct ImpurityResult{SI<:BathFitInput,I<:BathFitInput,E<:PoleExpansion,
     end
 end
 
-function ImpurityResult(source_input::BathFitInput, input_kind::Symbol,
-                        h_loc0::ImpurityOneBody, input::BathFitInput,
-                        expansion::PoleExpansion, discretization::DiscretizationResult,
-                        bathfit_audit::BathFitAudit, mounted::AbstractMountedBath,
-                        lowered::LoweredImpurityHamiltonian,
-                        ground_state::GroundStateResult, energy::Real,
-                        observables::NamedTuple, real_time::NamedTuple,
-                        imaginary_time::Union{Nothing,ImaginaryTimeResult},
-                        complex_time::NamedTuple, request::SolveRequest,
-                        warm_identity::UInt)
+function TTNSSolveResult(source_input::BathFitInput, input_kind::Symbol,
+                         h_loc0::ImpurityOneBody, input::BathFitInput,
+                         expansion::PoleExpansion,
+                         discretization::DiscretizationResult,
+                         bathfit_audit::BathFitAudit,
+                         mounted::AbstractMountedBath,
+                         lowered::LoweredImpurityHamiltonian,
+                         ground_state::GroundStateResult, energy::Real,
+                         observables::NamedTuple, real_time::NamedTuple,
+                         imaginary_time::Union{Nothing,ImaginaryTimeResult},
+                         complex_time::NamedTuple, request::TTNSSolveRequest,
+                         warm_identity::UInt)
     input_kind in (:weiss, :hybridization) || throw(ArgumentError(
-        "ImpurityResult input_kind must be :weiss or :hybridization",
+        "TTNSSolveResult input_kind must be :weiss or :hybridization",
     ))
     resolved_energy = Float64(energy)
     isfinite(resolved_energy) || throw(ArgumentError(
-        "ImpurityResult energy must be finite",
+        "TTNSSolveResult energy must be finite",
     ))
     _require_observable_values(observables)
-    _require_raw_correlator_values(real_time, "ImpurityResult real_time")
-    _require_raw_correlator_values(complex_time, "ImpurityResult complex_time")
-    return ImpurityResult(
+    _require_raw_correlator_values(real_time, "TTNSSolveResult real_time")
+    _require_raw_correlator_values(complex_time, "TTNSSolveResult complex_time")
+    return TTNSSolveResult(
         source_input, input_kind, h_loc0, input, expansion, discretization,
         bathfit_audit, mounted, lowered, ground_state, resolved_energy,
         observables, real_time, imaginary_time, complex_time, request,
@@ -614,19 +615,21 @@ function ImpurityResult(source_input::BathFitInput, input_kind::Symbol,
 end
 
 """
-    Solver(; gf_struct, layout, topology_plan, bath_mapping=nothing, phys=nothing,
-           bath_fit_kernel, ops=ImpurityOperators(layout), symmetry=SymmetrySpec(layout),
-           soc=nothing, ttno_builder=LegacyTTNOBuilder(),
-           compression_atol=0, scheme=TruncationScheme())
+    TTNSSolver(; gf_struct, layout, topology_plan, bath_mapping=nothing,
+               phys=nothing, bath_fit_kernel, ops=ImpurityOperators(layout),
+               symmetry=SymmetrySpec(layout), soc=nothing,
+               ttno_builder=LegacyTTNOBuilder(), compression_atol=0,
+               scheme=TruncationScheme())
 
-Stateful breaking impurity-solver owner. `gf_struct` is the exact named
+Stateful TTNS impurity-solver owner. `gf_struct` is the exact named
 [`Partition`](@ref), never an inferred collection of arms. Staged mutable
 fields record fit, realization, mounting, lowering, warm-start, and result
 state so every input replacement can invalidate them atomically.
 """
-mutable struct Solver{L<:FlavorLayout,P<:Partition,K<:AbstractRealPoleBathFitKernel,
-                      O<:ImpurityOperators,PH<:NamedTuple,S<:SymmetrySpec,
-                      B<:AbstractTTNOBuilder,T<:TruncationScheme} <:
+mutable struct TTNSSolver{L<:FlavorLayout,P<:Partition,
+                          K<:AbstractRealPoleBathFitKernel,
+                          O<:ImpurityOperators,PH<:NamedTuple,S<:SymmetrySpec,
+                          B<:AbstractTTNOBuilder,T<:TruncationScheme} <:
         AbstractImpuritySolver
     gf_struct::P
     layout::L
@@ -653,6 +656,6 @@ mutable struct Solver{L<:FlavorLayout,P<:Partition,K<:AbstractRealPoleBathFitKer
     bathfit_audit::Union{Nothing,BathFitAudit}
     warm_start::Union{Nothing,TTNS}
     warm_identity::Union{Nothing,UInt}
-    last_request::Union{Nothing,AbstractSolveRequest}
-    last_result::Union{Nothing,AbstractImpurityResult}
+    last_request::Union{Nothing,AbstractImpuritySolveRequest}
+    last_result::Union{Nothing,AbstractImpuritySolveResult}
 end

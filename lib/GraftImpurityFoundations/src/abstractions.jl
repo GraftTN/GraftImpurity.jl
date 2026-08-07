@@ -9,7 +9,21 @@ abstract type AbstractBathMappingKernel end
 abstract type AbstractImpurityTopologyPlan end
 abstract type AbstractMountedBath end
 abstract type AbstractImpurityInteraction end
+
+"""
+Backend-neutral marker for impurity solver implementations.
+"""
 abstract type AbstractImpuritySolver end
+
+"""
+Backend-neutral marker for typed impurity solve requests.
+"""
+abstract type AbstractImpuritySolveRequest end
+
+"""
+Backend-neutral marker for typed impurity solve results.
+"""
+abstract type AbstractImpuritySolveResult end
 
 """
     real_pole_bath_fit(input, kernel, partition)
@@ -153,7 +167,7 @@ function audit_symmetry end
 
 Set a mutually exclusive Weiss-field input on a stateful impurity solver.
 
-The implemented M6 Solver conversion requires an explicit layout-owned
+The implemented M6 TTNS solver conversion requires an explicit layout-owned
 `h_loc0`; a Weiss propagator alone cannot determine a hybridization under an
 arbitrary chemical-potential convention.
 """

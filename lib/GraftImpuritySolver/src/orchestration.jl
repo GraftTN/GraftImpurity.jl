@@ -8,20 +8,20 @@ function _solver_physical_manifest(operators::ImpurityOperators, phys)
     raw = Dict{Symbol,ElementarySpace}()
     for (site, space) in pairs(phys)
         site isa Symbol || throw(ArgumentError(
-            "Solver phys keys must be Symbols",
+            "TTNSSolver phys keys must be Symbols",
         ))
         space isa ElementarySpace || throw(ArgumentError(
-            "Solver phys values must be Graft ElementarySpaces",
+            "TTNSSolver phys values must be Graft ElementarySpaces",
         ))
         raw[site] = space
     end
     Set(keys(raw)) == Set(names) || throw(ArgumentError(
-        "Solver phys must declare exactly the FlavorLayout physical sites; " *
+        "TTNSSolver phys must declare exactly the FlavorLayout physical sites; " *
         "bath spaces are produced by mount_bath",
     ))
     for site in names
         raw[site] == getproperty(expected, site) || throw(ArgumentError(
-            "Solver phys space at $site disagrees with ImpurityOperators",
+            "TTNSSolver phys space at $site disagrees with ImpurityOperators",
         ))
     end
     return expected
@@ -31,25 +31,25 @@ function _validate_solver_topology(layout::FlavorLayout, topology_plan,
                                    bath_mapping)
     if bath_mapping === nothing
         topology_plan === nothing && throw(ArgumentError(
-            "Solver needs an explicit T3NS, FTPS, or custom TreeTopology when " *
+            "TTNSSolver needs an explicit T3NS, FTPS, or custom TreeTopology when " *
             "bath_mapping is nothing",
         ))
         topology_plan isa Union{T3NS,FTPS,TreeTopology} || throw(ArgumentError(
-            "Solver topology_plan must be T3NS, FTPS, or TreeTopology",
+            "TTNSSolver topology_plan must be T3NS, FTPS, or TreeTopology",
         ))
         if topology_plan isa AbstractImpurityTopologyPlan
             topology_plan.layout == layout || throw(ArgumentError(
-                "Solver topology plan FlavorLayout must match layout",
+                "TTNSSolver topology plan FlavorLayout must match layout",
             ))
         else
             _validate_impurity_nodes(topology_plan, layout)
         end
     else
         bath_mapping isa CayleyTreeKernel || throw(ArgumentError(
-            "Solver currently accepts only CayleyTreeKernel bath mappings",
+            "TTNSSolver currently accepts only CayleyTreeKernel bath mappings",
         ))
         topology_plan === nothing || throw(ArgumentError(
-            "Solver bath_mapping and topology_plan are mutually exclusive",
+            "TTNSSolver bath_mapping and topology_plan are mutually exclusive",
         ))
     end
     return nothing
@@ -59,23 +59,24 @@ function _validate_solver_onebody(onebody::Union{Nothing,ImpurityOneBody},
                                   layout::FlavorLayout, name::AbstractString)
     onebody === nothing && return nothing
     onebody.layout == layout || throw(ArgumentError(
-        "$name FlavorLayout must match Solver.layout",
+        "$name FlavorLayout must match TTNSSolver.layout",
     ))
     return onebody
 end
 
 """
-    Solver(; gf_struct, layout, topology_plan, bath_mapping=nothing,
+    TTNSSolver(; gf_struct, layout, topology_plan, bath_mapping=nothing,
            phys=nothing, bath_fit_kernel, ops=ImpurityOperators(layout),
            symmetry=SymmetrySpec(layout), soc=nothing,
            ttno_builder=LegacyTTNOBuilder(), compression_atol=0,
            scheme=TruncationScheme())
 
-Construct an empty, stateful impurity solver. A fitting input is installed only
-through one of the mutually exclusive `set_weiss!` or `set_hybridization!`
-methods; construction never stores a mutable GreenFunc source by alias.
+Construct an empty, stateful TTNS impurity solver. A fitting input is installed
+only through one of the mutually exclusive `set_weiss!` or
+`set_hybridization!` methods; construction never stores a mutable GreenFunc
+source by alias.
 """
-function Solver(; gf_struct::Partition, layout::FlavorLayout,
+function TTNSSolver(; gf_struct::Partition, layout::FlavorLayout,
                 topology_plan=nothing,
                 bath_mapping=nothing,
                 phys=nothing,
@@ -91,19 +92,19 @@ function Solver(; gf_struct::Partition, layout::FlavorLayout,
                     T<:TruncationScheme}
     validate_partition(gf_struct, layout)
     ops.layout == layout || throw(ArgumentError(
-        "Solver ImpurityOperators FlavorLayout must match layout",
+        "TTNSSolver ImpurityOperators FlavorLayout must match layout",
     ))
     symmetry.layout == layout || throw(ArgumentError(
-        "Solver SymmetrySpec FlavorLayout must match layout",
+        "TTNSSolver SymmetrySpec FlavorLayout must match layout",
     ))
-    _validate_solver_onebody(soc, layout, "Solver soc")
+    _validate_solver_onebody(soc, layout, "TTNSSolver soc")
     _validate_solver_topology(layout, topology_plan, bath_mapping)
     tolerance = Float64(compression_atol)
     isfinite(tolerance) && tolerance >= 0 || throw(ArgumentError(
-        "Solver compression_atol must be finite and nonnegative",
+        "TTNSSolver compression_atol must be finite and nonnegative",
     ))
     physical = _solver_physical_manifest(ops, phys)
-    return Solver(
+    return TTNSSolver(
         gf_struct, layout, topology_plan, bath_mapping, physical,
         bath_fit_kernel, ops, symmetry, soc, ttno_builder, tolerance, scheme,
         :unset,
@@ -124,7 +125,7 @@ function Solver(; gf_struct::Partition, layout::FlavorLayout,
     )
 end
 
-function _invalidate_solver!(solver::Solver)
+function _invalidate_solver!(solver::TTNSSolver)
     solver.expansion = nothing
     solver.discretization = nothing
     solver.mapping_result = nothing
@@ -139,31 +140,31 @@ function _invalidate_solver!(solver::Solver)
     return solver
 end
 
-function _validate_solver_fit_input(solver::Solver, input::BathFitInput)
+function _validate_solver_fit_input(solver::TTNSSolver, input::BathFitInput)
     input.layout == solver.layout || throw(ArgumentError(
-        "Solver bath-fit input FlavorLayout must match Solver.layout",
+        "TTNSSolver bath-fit input FlavorLayout must match TTNSSolver.layout",
     ))
     _validate_fit_input(input, solver.gf_struct)
     input.statistics === :fermion || throw(ArgumentError(
-        "Solver currently supports fermionic GreenFunc fitting inputs only",
+        "TTNSSolver currently supports fermionic GreenFunc fitting inputs only",
     ))
     hasproperty(input.metadata, :temperature) || throw(ArgumentError(
-        "Solver GreenFunc input metadata must retain a temperature context",
+        "TTNSSolver GreenFunc input metadata must retain a temperature context",
     ))
     return input
 end
 
-function _solver_input_from_gf(solver::Solver, gf::GreenFunc.Gf;
+function _solver_input_from_gf(solver::TTNSSolver, gf::GreenFunc.Gf;
                                block::Union{Nothing,Symbol}=nothing)
     names = block_names(solver.gf_struct)
     selected = if block === nothing
         length(names) == 1 || throw(ArgumentError(
-            "a single GreenFunc.Gf needs an explicit block for a multi-block Solver",
+            "a single GreenFunc.Gf needs an explicit block for a multi-block TTNSSolver",
         ))
         only(names)
     else
         block in names || throw(ArgumentError(
-            "GreenFunc.Gf block $block is absent from Solver.gf_struct",
+            "GreenFunc.Gf block $block is absent from TTNSSolver.gf_struct",
         ))
         block
     end
@@ -171,19 +172,19 @@ function _solver_input_from_gf(solver::Solver, gf::GreenFunc.Gf;
                                      BathFitInput(solver.layout, gf, selected))
 end
 
-function _solver_input_from_gf(solver::Solver, blocks::GreenFunc.BlockGf)
+function _solver_input_from_gf(solver::TTNSSolver, blocks::GreenFunc.BlockGf)
     return _validate_solver_fit_input(solver, BathFitInput(solver.layout, blocks))
 end
 
-function _replace_solver_input!(solver::Solver, kind::Symbol,
+function _replace_solver_input!(solver::TTNSSolver, kind::Symbol,
                                 source_input::BathFitInput,
                                 input::BathFitInput, h_loc0::ImpurityOneBody)
     kind in (:weiss, :hybridization) || throw(ArgumentError(
-        "internal Solver input kind must be :weiss or :hybridization",
+        "internal TTNSSolver input kind must be :weiss or :hybridization",
     ))
     _validate_solver_fit_input(solver, source_input)
     _validate_solver_fit_input(solver, input)
-    _validate_solver_onebody(h_loc0, solver.layout, "Solver h_loc0")
+    _validate_solver_onebody(h_loc0, solver.layout, "TTNSSolver h_loc0")
     _invalidate_solver!(solver)
     solver.input_kind = kind
     solver.source_input = source_input
@@ -199,14 +200,14 @@ Install a direct GreenFunc hybridization input. `Delta` and a prior Weiss input
 are mutually exclusive; replacing either invalidates fit, bath, Hamiltonian,
 result, and warm-start state.
 """
-function set_hybridization!(solver::Solver, delta::GreenFunc.Gf;
+function set_hybridization!(solver::TTNSSolver, delta::GreenFunc.Gf;
                              h_loc0::ImpurityOneBody,
                              block::Union{Nothing,Symbol}=nothing)
     input = _solver_input_from_gf(solver, delta; block)
     return _replace_solver_input!(solver, :hybridization, input, input, h_loc0)
 end
 
-function set_hybridization!(solver::Solver, delta::GreenFunc.BlockGf;
+function set_hybridization!(solver::TTNSSolver, delta::GreenFunc.BlockGf;
                              h_loc0::ImpurityOneBody)
     input = _solver_input_from_gf(solver, delta)
     return _replace_solver_input!(solver, :hybridization, input, input, h_loc0)
@@ -290,9 +291,9 @@ end
 
 Install a Matsubara Weiss Green function by explicitly forming
 `Delta(iω) = iω*I - h_loc0 - inv(G0(iω))`. The typed `h_loc0` is mandatory:
-the Solver never guesses a chemical-potential or local one-body convention.
+the TTNSSolver never guesses a chemical-potential or local one-body convention.
 """
-function set_weiss!(solver::Solver, weiss::GreenFunc.Gf;
+function set_weiss!(solver::TTNSSolver, weiss::GreenFunc.Gf;
                     h_loc0::ImpurityOneBody,
                     block::Union{Nothing,Symbol}=nothing)
     input = _solver_input_from_gf(solver, weiss; block)
@@ -300,27 +301,27 @@ function set_weiss!(solver::Solver, weiss::GreenFunc.Gf;
     return _replace_solver_input!(solver, :weiss, input, converted, h_loc0)
 end
 
-function set_weiss!(solver::Solver, weiss::GreenFunc.BlockGf;
+function set_weiss!(solver::TTNSSolver, weiss::GreenFunc.BlockGf;
                     h_loc0::ImpurityOneBody)
     input = _solver_input_from_gf(solver, weiss)
     converted = _weiss_hybridization_input(input, h_loc0, solver.gf_struct)
     return _replace_solver_input!(solver, :weiss, input, converted, h_loc0)
 end
 
-function _require_solver_input(solver::Solver)
+function _require_solver_input(solver::TTNSSolver)
     solver.source_input === nothing && throw(ArgumentError(
-        "Solver has no source GreenFunc provenance for its fitting input",
+        "TTNSSolver has no source GreenFunc provenance for its fitting input",
     ))
     solver.input === nothing && throw(ArgumentError(
-        "Solver needs set_weiss! or set_hybridization! before solve!",
+        "TTNSSolver needs set_weiss! or set_hybridization! before solve!",
     ))
     solver.h_loc0 === nothing && throw(ArgumentError(
-        "Solver has no typed h_loc0 for Hamiltonian lowering",
+        "TTNSSolver has no typed h_loc0 for Hamiltonian lowering",
     ))
     return solver.source_input, solver.input, solver.h_loc0
 end
 
-function _solver_bathfit_audit(report::BathFitReport, request::SolveRequest)
+function _solver_bathfit_audit(report::BathFitReport, request::TTNSSolveRequest)
     return audit_bathfit(
         report,
         BathFitCriteria(
@@ -331,7 +332,7 @@ function _solver_bathfit_audit(report::BathFitReport, request::SolveRequest)
     )
 end
 
-function _solver_mount_bath!(solver::Solver, bath::DiscreteBath)
+function _solver_mount_bath!(solver::TTNSSolver, bath::DiscreteBath)
     if solver.bath_mapping !== nothing
         mapped = map_bath(solver.bath_mapping, bath)
         solver.mapping_result = mapped
@@ -345,12 +346,12 @@ function _solver_mount_bath!(solver::Solver, bath::DiscreteBath)
         )
     end
     plan isa TreeTopology || throw(ArgumentError(
-        "Solver has no mountable topology plan",
+        "TTNSSolver has no mountable topology plan",
     ))
     return mount_bath(plan, bath; sector=solver.ops.sector)
 end
 
-function _solver_warm_identity(solver::Solver,
+function _solver_warm_identity(solver::TTNSSolver,
                                interaction::AbstractImpurityInteraction,
                                mounted::AbstractMountedBath)
     bath_hash = _mounted_bath_integrity_hash(mounted)
@@ -361,12 +362,12 @@ function _solver_warm_identity(solver::Solver,
                  solver.compression_atol))
 end
 
-function _state_requires_complex_eltype(request::SolveRequest)
+function _state_requires_complex_eltype(request::TTNSSolveRequest)
     return request.real_time !== nothing || request.complex_time !== nothing
 end
 
 function _validate_solver_state(state::TTNS, lowered::LoweredImpurityHamiltonian,
-                                request::SolveRequest)
+                                request::TTNSSolveRequest)
     topology(state) == topology(lowered.operator) || throw(ArgumentError(
         "initial_state topology does not match the mounted impurity Hamiltonian",
     ))
@@ -394,13 +395,13 @@ function _validate_solver_state(state::TTNS, lowered::LoweredImpurityHamiltonian
     end
     !_state_requires_complex_eltype(request) || eltype(state) <: Complex ||
         throw(ArgumentError(
-            "real/complex-time Solver requests require a complex-eltype initial_state",
+            "real/complex-time TTNSSolver requests require a complex-eltype initial_state",
         ))
     return state
 end
 
-function _solver_initial_state(solver::Solver, lowered::LoweredImpurityHamiltonian,
-                               identity::UInt, request::SolveRequest,
+function _solver_initial_state(solver::TTNSSolver, lowered::LoweredImpurityHamiltonian,
+                               identity::UInt, request::TTNSSolveRequest,
                                initial_state;
                                warm_start=solver.warm_start,
                                warm_identity=solver.warm_identity)
@@ -530,16 +531,16 @@ end
 
 Run the explicit lifecycle `fit -> realize -> topology/mount -> lower -> DMRG
 -> requested correlators`. A non-mountable real-pole fit returns a typed
-`NonMountableImpurityResult`. An explicit Cayley mapping mounts the retained
+`TTNSNonMountableSolveResult`. An explicit Cayley mapping mounts the retained
 transformed bath Hamiltonian and compatible mapping topology on scalar or
-block local Fock carriers. The Solver never falls back to a canonical diagonal
-star.
+block local Fock carriers. The `TTNSSolver` never falls back to a canonical
+diagonal star.
 """
-function solve!(solver::Solver, interaction::AbstractImpurityInteraction,
-                request::SolveRequest; initial_state=nothing)
+function solve!(solver::TTNSSolver, interaction::AbstractImpurityInteraction,
+                request::TTNSSolveRequest; initial_state=nothing)
     _validate_solve_request_contract(request)
     interaction.layout == solver.layout || throw(ArgumentError(
-        "solve! interaction FlavorLayout must match Solver.layout",
+        "solve! interaction FlavorLayout must match TTNSSolver.layout",
     ))
     source_input, input, h_loc0 = _require_solver_input(solver)
     prior_warm_start = solver.warm_start
@@ -555,7 +556,7 @@ function solve!(solver::Solver, interaction::AbstractImpurityInteraction,
         solver.discretization = discretization
         solver.interaction = interaction
         solver.bathfit_audit = audit
-        result = NonMountableImpurityResult(
+        result = TTNSNonMountableSolveResult(
             source_input, solver.input_kind, h_loc0, input, expansion,
             discretization, audit, request,
         )
@@ -598,7 +599,7 @@ function solve!(solver::Solver, interaction::AbstractImpurityInteraction,
         _solver_complex_time(state, energy, lowered, request.complex_time,
                              request.correlators)
 
-    result = ImpurityResult(
+    result = TTNSSolveResult(
         source_input, solver.input_kind, h_loc0, input, expansion, discretization,
         audit, mounted, lowered, ground_state, energy, observables, real_time,
         imaginary_time, complex_time, request, identity,

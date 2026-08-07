@@ -135,17 +135,19 @@ function _solver_initial_state(layout; T::Type{<:Number}=ComplexF64)
     )
 end
 
-function _solver_mapped_initial_state(solver::Solver,
-                                      mapping::CayleyTreeKernel)
+function _solver_mapped_initial_state(solver::TTNSSolver,
+    mapping::CayleyTreeKernel)
     input = solver.input
-    input isa BathFitInput || throw(ArgumentError("mapped Solver fixture needs input"))
+    input isa BathFitInput || throw(ArgumentError(
+        "mapped TTNSSolver fixture needs input",
+    ))
     solver.ops.sector isa ParticleNumberSector || throw(ArgumentError(
-        "mapped Solver fixture requires a particle-number sector",
+        "mapped TTNSSolver fixture requires a particle-number sector",
     ))
     expansion = real_pole_bath_fit(input, solver.bath_fit_kernel, solver.gf_struct)
     discretization = realize_bath(input, expansion, solver.gf_struct)
     discretization isa DiscretizationResult || throw(ArgumentError(
-        "mapped Solver fixture needs a Hamiltonian-realizable bath",
+        "mapped TTNSSolver fixture needs a Hamiltonian-realizable bath",
     ))
     mounted = mount_bath(
         map_bath(mapping, discretization.bath); sector=solver.ops.sector,
@@ -175,7 +177,7 @@ function _solver_value(; kernel=_SolverSyntheticKernel(0.2, 0.16 + 0im),
     operators = ImpurityOperators(layout; sector=ParticleNumberSector())
     plan = topology_plan === nothing && bath_mapping === nothing ? T3NS(layout) :
            topology_plan
-    solver = Solver(
+    solver = TTNSSolver(
         ; gf_struct=partition, layout, topology_plan=plan, bath_mapping,
         bath_fit_kernel=kernel, ops=operators, compression_atol=1e-12,
     )
@@ -187,7 +189,7 @@ function _solver_block_value(mapping::CayleyTreeKernel)
     partition = _solver_block_partition()
     operators = ImpurityOperators(layout; sector=ParticleNumberSector())
     residue = ComplexF64[0.16 0.03im; -0.03im 0.09]
-    solver = Solver(
+    solver = TTNSSolver(
         ; gf_struct=partition, layout, topology_plan=nothing,
         bath_mapping=mapping,
         bath_fit_kernel=_SolverBlockSyntheticKernel(0.2, residue),
@@ -208,7 +210,7 @@ function _solver_exact_complex_correlator(state::TTNS, energy::Real,
     ]
 end
 
-@testset "M6 stateful Solver" begin
+@testset "M6 stateful TTNSSolver" begin
     empty_raw = RawCorrelator(:empty, :synthetic, ComplexF64[], ComplexF64[])
     @test isempty(empty_raw.z_grid)
     @test isempty(empty_raw.values)
@@ -249,7 +251,7 @@ end
     )
     multi_partition = Partition(:a => [:a], :b => [:b])
     multi_ops = ImpurityOperators(multi_layout; sector=ParticleNumberSector())
-    multi_solver = Solver(
+    multi_solver = TTNSSolver(
         ; gf_struct=multi_partition, layout=multi_layout,
         topology_plan=T3NS(multi_layout), bath_fit_kernel=_SolverSyntheticKernel(
             0.2, 0.16 + 0im,
@@ -304,7 +306,7 @@ end
         evolver=GlobalKrylov(krylovdim=4, maxiter=10,
                              fit_nsweeps=1, fit_tol=1e-10),
     )
-    request = SolveRequest(
+    request = TTNSSolveRequest(
         ; ground_state=GroundStateRequest(
             trunc=TruncationScheme(maxdim=4), nsweeps=2, tolerance=1e-10,
             krylovdim=4,
@@ -317,11 +319,11 @@ end
     @test_throws ArgumentError GroundStateResult(initial, 0.0, [Inf])
     block_weiss_result = solve!(
         block_solver, DensityDensityInteraction(zeros(1, 1), layout),
-        SolveRequest(; ground_state=GroundStateRequest(
+        TTNSSolveRequest(; ground_state=GroundStateRequest(
             trunc=TruncationScheme(maxdim=4), nsweeps=1, krylovdim=4,
         )); initial_state=_solver_initial_state(layout),
     )
-    @test block_weiss_result isa ImpurityResult
+    @test block_weiss_result isa TTNSSolveResult
     @test block_weiss_result.input_kind === :weiss
     @test block_weiss_result.source_input === block_solver.source_input
     @test block_weiss_result.input === block_solver.input
@@ -331,7 +333,7 @@ end
 
     result = solve!(solver, DensityDensityInteraction(zeros(1, 1), layout),
                     request; initial_state=initial)
-    @test result isa ImpurityResult
+    @test result isa TTNSSolveResult
     @test solver.last_result === result
     @test solver.last_request === request
     @test result.ground_state.state isa TTNS
@@ -393,11 +395,11 @@ end
         solver, DensityDensityInteraction(zeros(1, 1), layout), request;
         initial_state=_solver_initial_state(layout),
     )
-    @test refreshed_result isa ImpurityResult
+    @test refreshed_result isa TTNSSolveResult
 
     warm_result = solve!(solver, DensityDensityInteraction(zeros(1, 1), layout),
                          request)
-    @test warm_result isa ImpurityResult
+    @test warm_result isa TTNSSolveResult
     @test warm_result.warm_identity == refreshed_result.warm_identity
     changed = DensityDensityInteraction(reshape([0.3], 1, 1), layout)
     @test_throws ArgumentError solve!(solver, changed, request)
@@ -405,14 +407,15 @@ end
     @test solver.warm_start === nothing
     @test solver.lowered === nothing
     @test_throws ArgumentError solve!(
-        solver, DensityDensityInteraction(zeros(1, 1), layout), SolveRequest();
+        solver, DensityDensityInteraction(zeros(1, 1), layout),
+        TTNSSolveRequest();
         initial_state=_solver_initial_state(layout; T=ComplexF32),
     )
     set_hybridization!(solver, delta; h_loc0=h_loc)
     @test solver.last_result === nothing
     @test solver.warm_start === nothing
 
-    implicit_request = SolveRequest(
+    implicit_request = TTNSSolveRequest(
         ; complex_time=ComplexTimeRequest(
             (ComplexTimeSegment(-0.02, 1; label=:imaginary),
              ComplexTimeSegment(-0.05im, 1; label=:real));
@@ -424,7 +427,7 @@ end
         solver, DensityDensityInteraction(zeros(1, 1), layout), implicit_request;
         initial_state=_solver_initial_state(layout),
     )
-    implicit_real_request = SolveRequest(
+    implicit_real_request = TTNSSolveRequest(
         ; real_time=RealTimeRequest([0.0, 0.05]; evolver=ImplicitLogTime()),
         correlators=(correlator,),
     )
@@ -438,7 +441,7 @@ end
         :imp => site_operators(operators, :imp).N[1],
         :imp => site_operators(operators, :imp).N[1],
     )
-    finite_request = SolveRequest(
+    finite_request = TTNSSolveRequest(
         ; ground_state=GroundStateRequest(
             trunc=TruncationScheme(maxdim=4), nsweeps=1, krylovdim=4,
         ),
@@ -458,7 +461,7 @@ end
     @test finite_result.imaginary_time.correlators.density.convention ===
           :raw_correlator
     @test finite_result.imaginary_time.correlators.density.metadata.coordinate === :tau
-    # The Solver owns topology/physical-space assembly and exact request
+    # The TTNSSolver owns topology/physical-space assembly and exact request
     # forwarding; core's dedicated thermal suites own the TDVP-versus-ED
     # convergence evidence. Reproduce the same core trajectory independently
     # so a wrong beta, save grid, evolver, or insertion cannot pass here.
@@ -489,11 +492,11 @@ end
     set_hybridization!(ftps_solver, delta; h_loc0=h_loc)
     ftps_result = solve!(
         ftps_solver, DensityDensityInteraction(zeros(1, 1), layout),
-        SolveRequest(; ground_state=GroundStateRequest(
+        TTNSSolveRequest(; ground_state=GroundStateRequest(
             trunc=TruncationScheme(maxdim=4), nsweeps=1, krylovdim=4,
         )); initial_state=_solver_initial_state(layout),
     )
-    @test ftps_result isa ImpurityResult
+    @test ftps_result isa TTNSSolveResult
     @test ftps_result.mounted.topology == impurity_topology(
         FTPS(layout), _solver_partition(), ftps_result.discretization.bath,
     )
@@ -502,15 +505,15 @@ end
     set_hybridization!(nonmountable_solver, delta; h_loc0=h_loc)
     nonmountable = solve!(
         nonmountable_solver, DensityDensityInteraction(zeros(1, 1), layout),
-        SolveRequest(),
+        TTNSSolveRequest(),
     )
-    @test nonmountable isa NonMountableImpurityResult
+    @test nonmountable isa TTNSNonMountableSolveResult
     @test nonmountable_solver.last_result === nonmountable
     @test nonmountable.discretization isa NonMountablePoleFit
 
     group = CayleyOwnershipGroup(:d, [1], [:d])
     mapping = CayleyTreeKernel(ScalarCayley(), (group,))
-    @test_throws ArgumentError Solver(
+    @test_throws ArgumentError TTNSSolver(
         ; gf_struct=_solver_partition(), layout, topology_plan=T3NS(layout),
         bath_mapping=mapping, bath_fit_kernel=_SolverSyntheticKernel(0.2, 0.16im),
         ops=operators,
@@ -526,11 +529,11 @@ end
     )[1])) == [one_particle]
     mapped_result = solve!(
         mapped_solver, DensityDensityInteraction(zeros(1, 1), layout),
-        SolveRequest(; ground_state=GroundStateRequest(
+        TTNSSolveRequest(; ground_state=GroundStateRequest(
             trunc=TruncationScheme(maxdim=4), nsweeps=2, krylovdim=4,
         )); initial_state=mapped_initial,
     )
-    @test mapped_result isa ImpurityResult
+    @test mapped_result isa TTNSSolveResult
     @test mapped_result.mounted isa CayleyAndersonBath
     @test mapped_result.mounted.topology == mapped_mounted.topology
     @test mapped_solver.mapping_result isa CayleyMappingResult
@@ -561,11 +564,11 @@ end
     mapped_block_result = solve!(
         mapped_block_solver,
         DensityDensityInteraction(zeros(2, 2), block_layout),
-        SolveRequest(; ground_state=GroundStateRequest(
+        TTNSSolveRequest(; ground_state=GroundStateRequest(
             trunc=TruncationScheme(maxdim=8), nsweeps=2, krylovdim=8,
         )); initial_state=mapped_block_initial,
     )
-    @test mapped_block_result isa ImpurityResult
+    @test mapped_block_result isa TTNSSolveResult
     @test mapped_block_result.mounted isa CayleyAndersonBath
     @test mapped_block_result.mounted.mapping.mapped isa BlockCayleyBath
     @test mapped_block_result.mounted.topology == mapped_block_mounted.topology

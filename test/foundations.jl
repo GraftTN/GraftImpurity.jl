@@ -45,6 +45,29 @@ end
     end
 end
 
+@testset "solver protocol umbrella surface" begin
+    expected_bindings = (
+        :AbstractImpuritySolveRequest => GraftImpurityFoundations,
+        :AbstractImpuritySolveResult => GraftImpurityFoundations,
+        :TTNSSolver => GraftImpuritySolver,
+        :TTNSSolveRequest => GraftImpuritySolver,
+        :TTNSSolveResult => GraftImpuritySolver,
+        :TTNSNonMountableSolveResult => GraftImpuritySolver,
+    )
+    for (name, owner) in expected_bindings
+        @test name in names(GraftImpurity)
+        @test getfield(GraftImpurity, name) === getfield(owner, name)
+    end
+
+    removed_names = (
+        :Solver, :SolveRequest, :ImpurityResult, :NonMountableImpurityResult,
+    )
+    for name in removed_names
+        @test name ∉ names(GraftImpurity)
+        @test !isdefined(GraftImpurity, name)
+    end
+end
+
 @testset "generic method extension through umbrella" begin
     @test GraftImpurity.real_pole_bath_fit ===
           GraftImpurityFoundations.real_pole_bath_fit

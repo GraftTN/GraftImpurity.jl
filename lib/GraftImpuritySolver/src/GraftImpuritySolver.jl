@@ -25,6 +25,7 @@ using GraftImpurityFoundations: FlavorLayout, Partition, block_flavors,
     AbstractRealPoleBathFitKernel, AbstractBathMappingKernel,
     AbstractImpurityTopologyPlan, AbstractMountedBath,
     AbstractImpurityInteraction, AbstractImpuritySolver,
+    AbstractImpuritySolveRequest, AbstractImpuritySolveResult,
     bath_layout, bath_statistics, real_pole_bath_fit, realize_bath, mount_bath,
     map_bath, impurity_topology, lower_interaction, audit_bathfit, audit_symmetry
 import GraftImpurityFoundations: set_weiss!, set_hybridization!, solve!
@@ -51,8 +52,8 @@ export AbstractTTNOBuilder, LegacyTTNOBuilder, CompiledTTNOBuilder,
     ZeroTemperature, FiniteTemperature, GroundStateRequest, RealTimeRequest,
     ImaginaryTimeRequest, ComplexTimeSegment, ComplexTimeRequest,
     LocalObservable, LocalCorrelator, RawCorrelator, GroundStateResult,
-    ImaginaryTimeResult, SolveRequest, NonMountableImpurityResult,
-    ImpurityResult, Solver, set_weiss!, set_hybridization!, solve!
+    ImaginaryTimeResult, TTNSSolveRequest, TTNSNonMountableSolveResult,
+    TTNSSolveResult, TTNSSolver, set_weiss!, set_hybridization!, solve!
 
 include("hamiltonian.jl")
 include("types.jl")

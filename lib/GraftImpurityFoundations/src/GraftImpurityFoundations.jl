@@ -15,7 +15,8 @@ export Partition, block_names, block_flavors, block_index, partition_flavors,
 export AbstractRealPoleBathFitKernel, AbstractBathParametrization,
     AbstractBCFParametrization, AbstractHamiltonianBath,
     AbstractBathMappingKernel, AbstractImpurityTopologyPlan,
-    AbstractMountedBath, AbstractImpurityInteraction, AbstractImpuritySolver
+    AbstractMountedBath, AbstractImpurityInteraction, AbstractImpuritySolver,
+    AbstractImpuritySolveRequest, AbstractImpuritySolveResult
 export real_pole_bath_fit, fit_complex_bcf, evaluate_bcf,
     realize_quasi_lindblad, realize_coupled_lindblad, realize_bath, mount_bath,
     map_bath, impurity_topology, lower_interaction, audit_partition,
