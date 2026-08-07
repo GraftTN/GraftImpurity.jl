@@ -322,9 +322,10 @@ end
 function _hamiltonian_diagnostics(interaction::AbstractImpurityInteraction,
                                   mounted::Union{AndersonBath,CayleyAndersonBath})
     kanamori_terms = interaction isa KanamoriInteraction ? interaction.terms : nothing
+    layout = interaction_layout(interaction)
     return (
-        basis=basis_identity(interaction.layout),
-        interaction_hash=hash(interaction),
+        basis=basis_identity(layout),
+        interaction_hash=hash(interaction_identity(interaction)),
         kanamori_terms,
         ownership_hash=mounted.diagnostics.ownership_hash,
     )
@@ -374,23 +375,26 @@ function lower_hamiltonian(mounted::Union{AndersonBath,CayleyAndersonBath},
                            operators::ImpurityOperators;
                            h_loc::Union{Nothing,ImpurityOneBody}=nothing,
                            soc::Union{Nothing,ImpurityOneBody}=nothing,
-                           symmetry::SymmetrySpec=SymmetrySpec(interaction.layout),
+                           symmetry::SymmetrySpec=SymmetrySpec(
+                               interaction_layout(interaction),
+                           ),
                            ttno_builder::AbstractTTNOBuilder=LegacyTTNOBuilder(),
                            compression_atol::Real,
                            scheme::TruncationScheme=TruncationScheme())
     _validate_lowerable_bath(mounted)
-    interaction.layout == operators.layout || throw(ArgumentError(
+    layout = interaction_layout(interaction)
+    layout == operators.layout || throw(ArgumentError(
         "interaction FlavorLayout must match ImpurityOperators.layout",
     ))
-    symmetry.layout == interaction.layout || throw(ArgumentError(
+    symmetry.layout == layout || throw(ArgumentError(
         "SymmetrySpec FlavorLayout must match the interaction layout",
     ))
     _require_mounted_topology_integrity(mounted.topology)
     _validate_mounted_operator_spaces(mounted, operators)
     _require_mounted_hamiltonian_integrity(mounted)
     _require_mounted_ownership_integrity(mounted)
-    _validate_onebody_layout(h_loc, interaction.layout, "h_loc")
-    _validate_onebody_layout(soc, interaction.layout, "soc")
+    _validate_onebody_layout(h_loc, layout, "h_loc")
+    _validate_onebody_layout(soc, layout, "soc")
     complete_spec = _complete_symmetry_spec(symmetry, mounted)
     _require_charge_carrier(complete_spec, operators)
     tolerance = Float64(compression_atol)

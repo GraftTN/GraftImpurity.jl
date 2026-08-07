@@ -5,6 +5,7 @@ using GraftImpurityBaths
 using GraftImpurityFoundations
 using GraftImpurityInteractions
 using GraftImpurityPoleFits
+using GraftImpurityProblems
 using GraftImpuritySolver
 using GraftImpurityValidation
 using GraftStateDiagram
@@ -15,6 +16,7 @@ const _UMBRELLA_OWNERS = (
     GraftImpurityFoundations,
     GraftImpurityInteractions,
     GraftImpurityBaths,
+    GraftImpurityProblems,
     GraftImpurityPoleFits,
     GraftImpurityBathFit,
     GraftImpuritySolver,
@@ -47,12 +49,57 @@ end
 
 @testset "solver protocol umbrella surface" begin
     expected_bindings = (
+        :AbstractImpuritySolver => GraftImpurityFoundations,
+        :AbstractImpurityWorkspace => GraftImpurityFoundations,
         :AbstractImpuritySolveRequest => GraftImpurityFoundations,
         :AbstractImpuritySolveResult => GraftImpurityFoundations,
+        :interaction_layout => GraftImpurityFoundations,
+        :interaction_identity => GraftImpurityFoundations,
+        :solve! => GraftImpurityFoundations,
+        :AbstractImpuritySymmetryDeclaration => GraftImpurityProblems,
+        :ImpuritySymmetryDeclaration => GraftImpurityProblems,
+        :AbstractPhysicalActionSemantics => GraftImpurityProblems,
+        :ChargeU1ActionSemantics => GraftImpurityProblems,
+        :FlavorU1ActionSemantics => GraftImpurityProblems,
+        :SU2ActionSemantics => GraftImpurityProblems,
+        :SymmetryActionIdentity => GraftImpurityProblems,
+        :action_identity => GraftImpurityProblems,
+        :action_layout => GraftImpurityProblems,
+        :action_semantics => GraftImpurityProblems,
+        :category_product => GraftImpurityProblems,
+        :symmetry_actions => GraftImpurityProblems,
+        :symmetry_action_identities => GraftImpurityProblems,
+        :symmetry_layout => GraftImpurityProblems,
+        :AbstractImpurityManifold => GraftImpurityProblems,
+        :TargetIrrep => GraftImpurityProblems,
+        :IrrepScan => GraftImpurityProblems,
+        :manifold_action_identity => GraftImpurityProblems,
+        :manifold_targets => GraftImpurityProblems,
+        :manifold_identity => GraftImpurityProblems,
+        :validate_manifold => GraftImpurityProblems,
+        :validate_response_target => GraftImpurityProblems,
+        :ResponseReachabilityError => GraftImpurityProblems,
+        :validate_response_reachability => GraftImpurityProblems,
+        :ImpurityProblem => GraftImpurityProblems,
+        :problem_layout => GraftImpurityProblems,
+        :problem_partition => GraftImpurityProblems,
+        :problem_statistics => GraftImpurityProblems,
+        :problem_identity => GraftImpurityProblems,
+        :AbstractImpurityPreparationInput => GraftImpurityBathFit,
+        :AbstractImpurityPreparationOutcome => GraftImpurityBathFit,
+        :HybridizationPreparationInput => GraftImpurityBathFit,
+        :WeissPreparationInput => GraftImpurityBathFit,
+        :ImpurityPreparationPolicy => GraftImpurityBathFit,
+        :ImpurityPreparationProvenance => GraftImpurityBathFit,
+        :PreparedImpurityProblem => GraftImpurityBathFit,
+        :NonMountableImpurityPreparation => GraftImpurityBathFit,
+        :prepare_impurity_problem => GraftImpurityBathFit,
         :TTNSSolver => GraftImpuritySolver,
+        :TTNSWorkspace => GraftImpuritySolver,
         :TTNSSolveRequest => GraftImpuritySolver,
         :TTNSSolveResult => GraftImpuritySolver,
-        :TTNSNonMountableSolveResult => GraftImpuritySolver,
+        :TTNSScanResult => GraftImpuritySolver,
+        :TTNSCapabilityError => GraftImpuritySolver,
     )
     for (name, owner) in expected_bindings
         @test name in names(GraftImpurity)
@@ -61,6 +108,7 @@ end
 
     removed_names = (
         :Solver, :SolveRequest, :ImpurityResult, :NonMountableImpurityResult,
+        :TTNSNonMountableSolveResult, :set_weiss!, :set_hybridization!,
     )
     for name in removed_names
         @test name ∉ names(GraftImpurity)

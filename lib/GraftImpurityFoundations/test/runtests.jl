@@ -18,18 +18,21 @@ struct ExternalResult <: AbstractImpuritySolveResult
     value::Int
 end
 
-mutable struct ExternalSolver <: AbstractImpuritySolver
+struct ExternalSolver <: AbstractImpuritySolver
+    offset::Int
+end
+
+mutable struct ExternalWorkspace <: AbstractImpurityWorkspace
     result::Union{Nothing, ExternalResult}
 end
 
-ExternalSolver() = ExternalSolver(nothing)
+ExternalWorkspace() = ExternalWorkspace(nothing)
 
 function GraftImpurityFoundations.solve!(
-        solver::ExternalSolver, interaction::Int, request::ExternalRequest;
-        initial_state::Union{Nothing, Int}=nothing)
-    state_offset = isnothing(initial_state) ? 0 : initial_state
-    result = ExternalResult(interaction + request.value + state_offset)
-    solver.result = result
+        workspace::ExternalWorkspace, solver::ExternalSolver,
+        problem::Int, request::ExternalRequest)
+    result = ExternalResult(problem + request.value + solver.offset)
+    workspace.result = result
     return result
 end
 
@@ -83,17 +86,21 @@ end
         GraftImpurityFoundations.AbstractImpuritySolveRequest
     @test AbstractImpuritySolveResult ===
         GraftImpurityFoundations.AbstractImpuritySolveResult
+    @test AbstractImpurityWorkspace ===
+        GraftImpurityFoundations.AbstractImpurityWorkspace
     @test solve! === GraftImpurityFoundations.solve!
-    @test set_weiss! === GraftImpurityFoundations.set_weiss!
-    @test set_hybridization! === GraftImpurityFoundations.set_hybridization!
+    @test !isdefined(GraftImpurityFoundations, :set_weiss!)
+    @test !isdefined(GraftImpurityFoundations, :set_hybridization!)
     @test ExternalSolver <: AbstractImpuritySolver
+    @test ExternalWorkspace <: AbstractImpurityWorkspace
     @test ExternalRequest <: AbstractImpuritySolveRequest
     @test ExternalResult <: AbstractImpuritySolveResult
 
-    solver = ExternalSolver()
-    result = solve!(solver, 7, ExternalRequest(11); initial_state=13)
+    solver = ExternalSolver(13)
+    workspace = ExternalWorkspace()
+    result = solve!(workspace, solver, 7, ExternalRequest(11))
     @test result == ExternalResult(31)
-    @test solver.result === result
+    @test workspace.result === result
 
     loaded = Set(pkgid.name for pkgid in keys(Base.loaded_modules))
     @test "GraftImpuritySolver" ∉ loaded

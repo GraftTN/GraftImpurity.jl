@@ -7,24 +7,6 @@ function _require_complex_contour_evolver(request::ComplexTimeRequest)
     return request
 end
 
-function _request_time_horizon(request::TTNSSolveRequest)
-    horizon = nothing
-    if request.real_time !== nothing
-        horizon = maximum(request.real_time.times)
-    end
-    if request.complex_time !== nothing
-        grid, _ = _complex_contour_grid(request.complex_time)
-        contour_horizon = maximum(abs, grid)
-        horizon = horizon === nothing ? contour_horizon : max(horizon, contour_horizon)
-    end
-    return horizon
-end
-
-function _request_beta(request::TTNSSolveRequest)
-    request.imaginary_time === nothing && return nothing
-    return request.imaginary_time.temperature.beta_eff
-end
-
 function _validate_solve_request_contract(request::TTNSSolveRequest)
     request.real_time === nothing || request.real_time.temperature isa ZeroTemperature ||
         throw(ArgumentError("RealTimeRequest must carry ZeroTemperature()"))

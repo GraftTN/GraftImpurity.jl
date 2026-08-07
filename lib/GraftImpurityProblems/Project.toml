@@ -1,0 +1,24 @@
+name = "GraftImpurityProblems"
+uuid = "72127451-eddd-47b0-aca9-ed50881d020e"
+authors = ["weiyiguo9"]
+license = "Apache-2.0"
+version = "0.1.1"
+
+[deps]
+GraftFoundation = "b817f51d-645c-48d5-8696-150514b96021"
+GraftImpurityBaths = "5c03999c-56bc-4780-9d5e-8bfeabf3ad62"
+GraftImpurityFoundations = "3c703997-107e-47af-a3a4-2068413d67cf"
+GraftImpurityInteractions = "ff38f452-5450-47a1-bb7b-3484d76418db"
+
+[sources]
+GraftFoundation = {path = "../../../Graft.jl/lib/GraftFoundation"}
+GraftImpurityBaths = {path = "../GraftImpurityBaths"}
+GraftImpurityFoundations = {path = "../GraftImpurityFoundations"}
+GraftImpurityInteractions = {path = "../GraftImpurityInteractions"}
+
+[compat]
+GraftFoundation = "0.1.1"
+GraftImpurityBaths = "0.1.1"
+GraftImpurityFoundations = "0.1.1"
+GraftImpurityInteractions = "0.1.1"
+julia = "1.11"

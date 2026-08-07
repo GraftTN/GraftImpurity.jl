@@ -11,6 +11,51 @@ The core of GraftImpurity.jl contains three types of features:
 2. Mapping the effective Hamiltonian through constructing the tree tensor network operator; for T3NS (MT3N) and FTPS, we use star geometry. In the case of Cayley tree or in other cases, star geometry to chain geometry mapping is applied.
 3. Providing the post-processing of Green's functions which may be required for DMFT calculations, such as linear predictor and PSD projection through Lorentzian.
 
+## Solver-independent problem boundary
+
+`GraftImpurityProblems` owns the finite Hamiltonian that backend packages
+consume:
+
+```text
+GreenFunc / Weiss field
+        |
+        v
+GraftImpurityBathFit --prepare_impurity_problem--> ImpurityProblem
+                                                    + DiscreteBath
+                                                    + ImpurityOneBody
+                                                    + interaction
+                                                    + symmetry declaration
+                                                           |
+                                      +--------------------+------------------+
+                                      |                                       |
+                               GraftImpuritySolver                       external backend
+                               TTNSSolver policy                         solver policy
+                               TTNSWorkspace                             backend workspace
+```
+
+`ImpurityProblem` contains no fit source, Green-function template, topology,
+mounted bath, TTNO, TTNS state, determinant basis, workspace, or result.
+Extension-owned interactions provide both `interaction_layout` and an
+immutable, coefficient-complete `interaction_identity`; the latter prevents a
+mutable Hamiltonian from reusing a stale backend lowering.
+`TargetIrrep` and `IrrepScan` bind opaque many-body targets to the complete
+structural identity of a declared physical action, including its flavor basis
+and ordered category product. A backend must validate that identity and its
+own capabilities before materializing backend state.
+
+The current TTNS backend carries only the certified `ChargeU1` path. It can
+execute a bounded, explicitly supplied `IrrepScan` using independent workspace
+lanes, while multi-sector response scans, `FlavorU1`, and non-Abelian actions
+fail closed with typed capability errors. Every correlator names its explicit
+action-bound response target; the TTNS backend certifies it against the full
+operator flux, while an unknown backend/action combination reaches a generic
+fail-closed extension hook. The common problem and manifold containers remain
+category-parametric, so a future CI or non-Abelian backend can extend the
+action protocol without depending on `GraftImpuritySolver`. Fusion routes,
+multiplicities, duality/braiding data, local tensor carriers, and compiler
+channels remain responsibilities of Graft core and the concrete backend; they
+are not inferred or stored in the common impurity problem.
+
 #### Implemented Features
 
 A quick bath fit example is:

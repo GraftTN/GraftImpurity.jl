@@ -6,6 +6,7 @@ using GraftTTNOBuild
 using GraftImpurityFoundations
 using GraftImpurityInteractions
 using GraftImpurityBaths
+using GraftImpurityProblems
 using GraftImpuritySolver
 
 function _residual_driven_consumer_fixture()
@@ -33,6 +34,7 @@ function _residual_driven_consumer_fixture()
         SymmetryAudit(:certified, (), ()), nothing, (;))
     channel = LocalCorrelator(
         :particle,
+        TargetIrrep(ChargeU1(layout), U1Irrep(0)),
         :imp => site.Sp,
         :imp => site.Sm)
     return (; lowered, channel)

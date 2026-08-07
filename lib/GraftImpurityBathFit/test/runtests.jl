@@ -18,5 +18,6 @@ using Test
     include("esprit_tau_bathfit.jl")
     include("realization.jl")
     include("bathfit_report.jl")
+    include("preparation.jl")
     include("sparseir_adapter.jl")
 end

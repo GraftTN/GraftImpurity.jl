@@ -5,6 +5,7 @@ GraftImpurityBaths = "5c03999c-56bc-4780-9d5e-8bfeabf3ad62"
 GraftImpurityFoundations = "3c703997-107e-47af-a3a4-2068413d67cf"
 GraftImpurityInteractions = "ff38f452-5450-47a1-bb7b-3484d76418db"
 GraftImpurityPoleFits = "bc763d54-c6dc-4f25-bb71-83535c88eea5"
+GraftImpurityProblems = "72127451-eddd-47b0-aca9-ed50881d020e"
 GraftImpuritySolver = "671ba014-2ccc-4013-b4e5-eebb41b7846b"
 GraftImpurityValidation = "c9b6821c-9786-4062-96a1-3ad33b52b59d"
 GraftStateDiagram = "13d62100-4025-43ba-bfff-5935242a45be"
@@ -19,6 +20,7 @@ GraftImpurityBaths = {path = "../lib/GraftImpurityBaths"}
 GraftImpurityFoundations = {path = "../lib/GraftImpurityFoundations"}
 GraftImpurityInteractions = {path = "../lib/GraftImpurityInteractions"}
 GraftImpurityPoleFits = {path = "../lib/GraftImpurityPoleFits"}
+GraftImpurityProblems = {path = "../lib/GraftImpurityProblems"}
 GraftImpuritySolver = {path = "../lib/GraftImpuritySolver"}
 GraftImpurityValidation = {path = "../lib/GraftImpurityValidation"}
 GraftStateDiagram = {path = "../../Graft.jl/lib/GraftStateDiagram"}

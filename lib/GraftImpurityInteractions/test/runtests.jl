@@ -34,6 +34,11 @@ end
 
     density = DensityDensityInteraction(ComplexF64[0.4 2.0; 2.0 0.6], layout)
     @test density.layout === layout
+    density_identity = interaction_identity(density)
+    density.U[1, 1] = 0.5
+    @test interaction_identity(density) != density_identity
+    density.U[1, 1] = 0.4
+    @test interaction_identity(density) == density_identity
     @test length(lower_interaction(density, operators, nothing)) == 3
     decomposition = split_density_density(density)
     @test decomposition.one_body.matrix == ComplexF64[0.4 0; 0 0.6]
@@ -64,6 +69,7 @@ end
     )
     @test opsum_signature(lower_interaction(full_vertex, operators, nothing)) ==
         density_signature
+    @test interaction_identity(full_vertex) != interaction_identity(full_bare)
     @test_throws ArgumentError FullCoulombInteraction(
         bare, AntisymmetrizedVertex(), layout,
     )
@@ -83,6 +89,8 @@ end
     k_operators = ImpurityOperators(k_layout; sector=ParticleNumberSector())
     @test density_kanamori.terms == KanamoriTerms(false, false)
     @test full_kanamori.terms == KanamoriTerms(true, true)
+    @test interaction_identity(density_kanamori) !=
+        interaction_identity(full_kanamori)
     @test length(lower_interaction(density_kanamori, k_operators, nothing)) == 6
     @test length(lower_interaction(full_kanamori, k_operators, nothing)) == 10
     @test_throws ArgumentError KanamoriFlavorMap(

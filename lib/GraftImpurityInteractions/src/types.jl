@@ -310,6 +310,43 @@ Base.hash(onebody::ImpurityOneBody, seed::UInt) = hash(
     _content_hash(onebody.matrix, hash(:ImpurityOneBody, seed)),
 )
 
+"""Authoritative `FlavorLayout` of a local one-body Hamiltonian."""
+one_body_layout(onebody::ImpurityOneBody) = onebody.layout
+
+"""Authoritative `FlavorLayout` shared by every built-in interaction value."""
+interaction_layout(interaction::Union{
+    DensityDensityInteraction,KanamoriInteraction,FullCoulombInteraction,
+}) = interaction.layout
+
+"""Immutable coefficient-level identity of a density-density interaction."""
+interaction_identity(interaction::DensityDensityInteraction) = (
+    family=:density_density,
+    layout=interaction.layout,
+    size=size(interaction.U),
+    coefficients=Tuple(vec(interaction.U)),
+)
+
+"""Immutable coefficient-level identity of a Kanamori interaction."""
+interaction_identity(interaction::KanamoriInteraction) = (
+    family=:kanamori,
+    layout=interaction.layout,
+    U=interaction.U,
+    Uprime=interaction.Uprime,
+    J=interaction.J,
+    spin_flip=interaction.terms.spin_flip,
+    pair_hopping=interaction.terms.pair_hopping,
+    orbital_pairs=interaction.flavor_map.orbital_pairs,
+)
+
+"""Immutable coefficient-level identity of a full Coulomb tensor."""
+interaction_identity(interaction::FullCoulombInteraction) = (
+    family=:full_coulomb,
+    layout=interaction.layout,
+    convention=typeof(interaction.convention),
+    size=size(interaction.U),
+    coefficients=Tuple(vec(interaction.U)),
+)
+
 """
     DensityDensityDecomposition
 

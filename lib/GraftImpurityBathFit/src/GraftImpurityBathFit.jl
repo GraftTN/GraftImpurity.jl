@@ -12,9 +12,11 @@ import Optim
 import SparseIR
 
 using GraftImpurityFoundations: AbstractFermionSector,
-    AbstractRealPoleBathFitKernel, FlavorLayout, ParticleNumberSector,
-    Partition, block_flavors, block_index, block_names, validate_partition,
-    bath_layout, bath_partition, bath_statistics
+    AbstractImpurityInteraction, AbstractRealPoleBathFitKernel, FlavorLayout,
+    ParticleNumberSector,
+    Partition, block_flavors, block_index, block_names, flavor_index,
+    validate_partition,
+    bath_layout, bath_partition, bath_statistics, interaction_layout
 import GraftImpurityFoundations: audit_bathfit, evaluate_bcf, fit_complex_bcf,
     mount_bath, real_pole_bath_fit, realize_bath, reconstruct_hybridization
 
@@ -23,6 +25,8 @@ using GraftImpurityBaths: BlockRealPoles, ComplexPoles, DiscreteBath,
 import GraftImpurityBaths: _attempt_factorization,
     _bathfit_health_mount_summary, _resolved_orbital_order
 using GraftImpurityPoleFits: pes_fit
+using GraftImpurityProblems: AbstractImpuritySymmetryDeclaration,
+    ImpurityProblem, symmetry_layout
 using GraftSpectral: AbstractNodeFailure, AllComponents, ClampedRank,
     DescendingRankSearch, ESPRIT, ESPRITDiagnostics, ExponentialSum, FailedFit,
     FirstControlled, IdentifiedFit, IdentifiedNodes, LeftSubspaceESPRIT,
@@ -40,6 +44,11 @@ export AbstractBathFitPerturbation, CovariancePerturbation,
     BathFitHealthCandidate, BathFitMetricSummary, BathFitOrderHealth,
     BathFitHealthThresholds, BathFitHealthReport
 export DiscretizationResult, NonMountablePoleFit
+export AbstractImpurityPreparationInput, AbstractImpurityPreparationOutcome,
+    HybridizationPreparationInput, WeissPreparationInput,
+    ImpurityPreparationPolicy, ImpurityPreparationProvenance,
+    PreparedImpurityProblem, NonMountableImpurityPreparation,
+    prepare_impurity_problem
 export QuadratureKernel, BoundaryFitKernel, PESKernel, MiniPoleKernel,
     CouplingFitKernel, ESPRITTauKernel, CouplingBlockTie, FreeModeAllocation,
     SignedModeAllocation, ComplexComponents, RealComponents, EqualTie,
@@ -63,6 +72,9 @@ include(joinpath(@__DIR__, "diagnostics", "reconstruction.jl"))
 include(joinpath(@__DIR__, "diagnostics", "report.jl"))
 include(joinpath(@__DIR__, "fitting", "realization.jl"))
 include(joinpath(@__DIR__, "diagnostics", "audit.jl"))
+include(joinpath(@__DIR__, "preparation", "types.jl"))
+include(joinpath(@__DIR__, "preparation", "sources.jl"))
+include(joinpath(@__DIR__, "preparation", "prepare.jl"))
 include(joinpath(@__DIR__, "diagnostics", "health_residuals.jl"))
 include(joinpath(@__DIR__, "diagnostics", "health_measures.jl"))
 include(joinpath(@__DIR__, "diagnostics", "health_spectral_details.jl"))

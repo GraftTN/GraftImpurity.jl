@@ -16,6 +16,14 @@ Backend-neutral marker for impurity solver implementations.
 abstract type AbstractImpuritySolver end
 
 """
+Backend-neutral marker for mutable backend execution workspaces.
+
+A workspace owns reusable build state, warm starts, and last-execution caches;
+solver values describe policy and remain separate from this mutable state.
+"""
+abstract type AbstractImpurityWorkspace end
+
+"""
 Backend-neutral marker for typed impurity solve requests.
 """
 abstract type AbstractImpuritySolveRequest end
@@ -163,28 +171,31 @@ sector is inferred from a flavor label.
 function audit_symmetry end
 
 """
-    set_weiss!(solver, G0_iw; h_loc0)
+    interaction_layout(interaction)
 
-Set a mutually exclusive Weiss-field input on a stateful impurity solver.
-
-The implemented M6 TTNS solver conversion requires an explicit layout-owned
-`h_loc0`; a Weiss propagator alone cannot determine a hybridization under an
-arbitrary chemical-potential convention.
+Return the authoritative `FlavorLayout` of an impurity interaction. Concrete
+interaction owners implement this accessor so common problem construction does
+not inspect implementation fields.
 """
-function set_weiss! end
+function interaction_layout end
 
 """
-    set_hybridization!(solver, Delta; h_loc0)
+    interaction_identity(interaction)
 
-Set a mutually exclusive hybridization-plus-one-body input on a stateful
-impurity solver.
+Return an immutable structural description of every Hamiltonian coefficient,
+convention, and basis choice carried by an impurity interaction. Problem and
+workspace identities use this value to invalidate cached lowerings. Extension
+interactions must implement this protocol; there is deliberately no fallback
+to object-identity hashing for mutable values.
 """
-function set_hybridization! end
+function interaction_identity end
 
 """
-    solve!(solver, interaction, request; initial_state=nothing)
+    solve!(workspace, solver, problem, request)
 
-Execute typed impurity solving and record the result on the solver.
+Execute a typed impurity solve using an explicit mutable workspace, immutable
+backend policy, canonical finite problem, and typed request. Backend packages
+provide concrete methods; the common protocol supplies no catch-all fallback.
 """
 function solve! end
 

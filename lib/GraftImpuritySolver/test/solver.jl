@@ -6,65 +6,10 @@ using GraftThermal
 using GraftImpurityFoundations
 using GraftImpurityInteractions
 using GraftImpurityBaths
-using GraftImpurityBathFit
+using GraftImpurityProblems
 using GraftImpuritySolver
-using GreenFunc
 using GraftTestUtils: product_ttns, to_dense
-using LinearAlgebra: dot, exp, inv
-
-struct _SolverSyntheticKernel <: AbstractRealPoleBathFitKernel
-    energy::Float64
-    residue::ComplexF64
-end
-
-struct _SolverBlockSyntheticKernel <: AbstractRealPoleBathFitKernel
-    energy::Float64
-    residue::Matrix{ComplexF64}
-end
-
-function GraftImpurityFoundations.real_pole_bath_fit(input::BathFitInput,
-                                          kernel::_SolverBlockSyntheticKernel,
-                                          partition::Partition)
-    interval = SpectralInterval(-2.0, 2.0, 1)
-    plan = DiscretizationPlan(
-        :spin => BlockDiscretizationPlan([interval]); shared_grid=true,
-    )
-    poles = BlockRealPoles(
-        input.layout, partition, [kernel.energy], [kernel.residue], [1];
-        statistics=:fermion,
-    )
-    return PoleExpansion(poles; kernel=:solver_block_synthetic, trace=(; plan))
-end
-
-function GraftImpurityFoundations.real_pole_bath_fit(input::BathFitInput,
-                                          kernel::_SolverSyntheticKernel,
-                                          partition::Partition)
-    interval = SpectralInterval(-2.0, 2.0, 1)
-    plan = DiscretizationPlan(
-        :d => BlockDiscretizationPlan([interval]); shared_grid=true,
-    )
-    poles = BlockRealPoles(
-        input.layout, partition, [kernel.energy], [kernel.residue], [1];
-        statistics=:fermion,
-    )
-    return PoleExpansion(poles; kernel=:solver_synthetic, trace=(; plan))
-end
-
-struct _SolverNonMountableKernel <: AbstractRealPoleBathFitKernel end
-
-function GraftImpurityFoundations.real_pole_bath_fit(input::BathFitInput,
-                                          ::_SolverNonMountableKernel,
-                                          partition::Partition)
-    interval = SpectralInterval(-2.0, 2.0, 1)
-    plan = DiscretizationPlan(
-        :d => BlockDiscretizationPlan([interval]); shared_grid=true,
-    )
-    poles = BlockRealPoles(
-        input.layout, partition, [0.2], ComplexF64[1.0 + 0.1im], [1];
-        statistics=:fermion,
-    )
-    return PoleExpansion(poles; kernel=:solver_nonmountable, trace=(; plan))
-end
+using LinearAlgebra: dot, exp
 
 function _solver_layout()
     return FlavorLayout(
@@ -72,130 +17,66 @@ function _solver_layout()
     )
 end
 
-function _solver_partition()
-    return Partition(:d => [:d])
-end
+_solver_partition() = Partition(:d => [:d])
 
-function _solver_block_layout()
-    return FlavorLayout(
-        [:up, :down], Dict(:up => :up_site, :down => :down_site),
-        Dict(:up_site => [:up], :down_site => [:down]); basis=:solver_block_fixture,
-    )
-end
-
-function _solver_block_partition()
-    return Partition(:spin => [:up, :down])
-end
-
-function _solver_hybridization_gf(; beta=10.0, energy=0.2, residue=0.16)
-    mesh = ImFreq(beta, true; grid=[-2, -1, 0, 1, 2])
-    data = ComplexF64[
-        residue / (im * mesh[index] - energy) for index in eachindex(mesh)
-    ]
-    return Gf(mesh; data, statistics=true, component=:matsubara)
-end
-
-function _solver_block_hybridization_gf(
-    ; beta=10.0, energy=0.2,
-    residue=ComplexF64[0.16 0.03im; -0.03im 0.09],
-)
-    mesh = ImFreq(beta, true; grid=[-2, -1, 0, 1, 2])
-    data = zeros(ComplexF64, 2, 2, length(mesh))
-    for index in eachindex(mesh)
-        data[:, :, index] .= residue ./ (im * mesh[index] - energy)
-    end
-    return Gf(
-        mesh; target_shape=(2, 2), data, statistics=true,
-        component=:matsubara,
-        target_labels=((:up, :down), (:up, :down)),
-    )
-end
-
-function _solver_weiss_gf(; beta=10.0, energy=0.2, residue=0.16)
-    mesh = ImFreq(beta, true; grid=[-2, -1, 0, 1, 2])
-    data = ComplexF64[]
-    for index in eachindex(mesh)
-        omega = mesh[index]
-        delta = residue / (im * omega - energy)
-        push!(data, inv(im * omega - delta))
-    end
-    return Gf(mesh; data, statistics=true, component=:matsubara)
-end
-
-function _solver_initial_state(layout; T::Type{<:Number}=ComplexF64)
-    topology = TreeTopology(:imp, [:imp => :bath_d_1])
-    operators = ImpurityOperators(layout; sector=ParticleNumberSector())
-    impurity = site_operators(operators, :imp)
-    bath = FermionSiteOperators([:bath_mode]; sector=ParticleNumberSector())
-    physical = Dict(:imp => impurity.P, :bath_d_1 => bath.P)
-    vacuum = FermionParity(0) ⊠ U1Irrep(0)
-    return product_ttns(
-        T, topology, physical,
-        Dict(:imp => vacuum, :bath_d_1 => vacuum),
-    )
-end
-
-function _solver_mapped_initial_state(solver::TTNSSolver,
-    mapping::CayleyTreeKernel)
-    input = solver.input
-    input isa BathFitInput || throw(ArgumentError(
-        "mapped TTNSSolver fixture needs input",
-    ))
-    solver.ops.sector isa ParticleNumberSector || throw(ArgumentError(
-        "mapped TTNSSolver fixture requires a particle-number sector",
-    ))
-    expansion = real_pole_bath_fit(input, solver.bath_fit_kernel, solver.gf_struct)
-    discretization = realize_bath(input, expansion, solver.gf_struct)
-    discretization isa DiscretizationResult || throw(ArgumentError(
-        "mapped TTNSSolver fixture needs a Hamiltonian-realizable bath",
-    ))
-    mounted = mount_bath(
-        map_bath(mapping, discretization.bath); sector=solver.ops.sector,
-    )
-    vacuum = FermionParity(0) ⊠ U1Irrep(0)
-    one_particle = FermionParity(1) ⊠ U1Irrep(1)
-    names = propertynames(mounted.phys)
-    first_space = getproperty(mounted.phys, first(names))
-    physical = Dict{Symbol,typeof(first_space)}()
-    for site in names
-        physical[site] = getproperty(mounted.phys, site)
-    end
-    sectors = Dict(site => vacuum for site in keys(physical))
-    impurity_site = physical_site(input.layout, first(flavors(input.layout)))
-    sectors[impurity_site] = one_particle
-    state = product_ttns(
-        ComplexF64, mounted.topology, physical,
-        sectors,
-    )
-    return state, mounted
-end
-
-function _solver_value(; kernel=_SolverSyntheticKernel(0.2, 0.16 + 0im),
-                       topology_plan=nothing, bath_mapping=nothing)
+function _solver_problem(; energy=0.2, coupling=0.4,
+                         h_loc=zeros(ComplexF64, 1, 1),
+                         interaction=zeros(ComplexF64, 1, 1))
     layout = _solver_layout()
     partition = _solver_partition()
-    operators = ImpurityOperators(layout; sector=ParticleNumberSector())
-    plan = topology_plan === nothing && bath_mapping === nothing ? T3NS(layout) :
-           topology_plan
-    solver = TTNSSolver(
-        ; gf_struct=partition, layout, topology_plan=plan, bath_mapping,
-        bath_fit_kernel=kernel, ops=operators, compression_atol=1e-12,
+    orbitals = BathOrbitals(
+        [energy], [[coupling + 0im]], [1], [1], [:d]; layout, partition,
     )
-    return solver, layout, operators
+    bath = DiscreteBath(layout, partition, orbitals; statistics=:fermion)
+    problem = ImpurityProblem(
+        bath, ImpurityOneBody(h_loc, layout),
+        DensityDensityInteraction(interaction, layout),
+    )
+    return problem
 end
 
-function _solver_block_value(mapping::CayleyTreeKernel)
-    layout = _solver_block_layout()
-    partition = _solver_block_partition()
-    operators = ImpurityOperators(layout; sector=ParticleNumberSector())
-    residue = ComplexF64[0.16 0.03im; -0.03im 0.09]
-    solver = TTNSSolver(
-        ; gf_struct=partition, layout, topology_plan=nothing,
-        bath_mapping=mapping,
-        bath_fit_kernel=_SolverBlockSyntheticKernel(0.2, residue),
-        ops=operators, compression_atol=1e-12,
+function _solver_block_problem()
+    layout = FlavorLayout(
+        [:up, :down], Dict(:up => :up_site, :down => :down_site),
+        Dict(:up_site => [:up], :down_site => [:down]);
+        basis=:solver_block_fixture,
     )
-    return solver, layout, operators
+    partition = Partition(:spin => [:up, :down])
+    orbitals = BathOrbitals(
+        [0.2, 0.3],
+        [ComplexF64[0.4, 0.0], ComplexF64[0.0, 0.3]],
+        [1, 2], [1, 1], [:up, :down]; layout, partition,
+    )
+    bath = DiscreteBath(layout, partition, orbitals; statistics=:fermion)
+    return ImpurityProblem(
+        bath, ImpurityOneBody(zeros(ComplexF64, 2, 2), layout),
+        DensityDensityInteraction(zeros(ComplexF64, 2, 2), layout),
+    )
+end
+
+function _charge_target(problem::ImpurityProblem, charge::Integer)
+    action = only(symmetry_actions(problem.symmetry))
+    return TargetIrrep(action, U1Irrep(charge))
+end
+
+function _solver_initial_state(problem::ImpurityProblem, solver::TTNSSolver;
+                               occupied_site::Union{Nothing,Symbol}=nothing,
+                               T::Type{<:Number}=ComplexF64)
+    workspace = TTNSWorkspace()
+    mounted = GraftImpuritySolver._solver_mount_bath!(
+        workspace, solver, problem.bath,
+    )
+    names = propertynames(mounted.phys)
+    first_space = getproperty(mounted.phys, first(names))
+    physical = Dict{Symbol,typeof(first_space)}(
+        site => getproperty(mounted.phys, site) for site in names
+    )
+    vacuum = FermionParity(0) ⊠ U1Irrep(0)
+    local_sectors = Dict(site => vacuum for site in keys(physical))
+    if occupied_site !== nothing
+        local_sectors[occupied_site] = FermionParity(1) ⊠ U1Irrep(1)
+    end
+    return product_ttns(T, mounted.topology, physical, local_sectors), mounted
 end
 
 function _solver_exact_complex_correlator(state::TTNS, energy::Real,
@@ -210,239 +91,534 @@ function _solver_exact_complex_correlator(state::TTNS, energy::Real,
     ]
 end
 
-@testset "M6 stateful TTNSSolver" begin
-    empty_raw = RawCorrelator(:empty, :synthetic, ComplexF64[], ComplexF64[])
-    @test isempty(empty_raw.z_grid)
-    @test isempty(empty_raw.values)
-    @test_throws DimensionMismatch RawCorrelator(
-        :mismatched, :synthetic, ComplexF64[0], ComplexF64[],
+struct _OpaqueAction
+    layout::FlavorLayout
+end
+
+struct _OpaqueActionSemantics <: AbstractPhysicalActionSemantics
+    generator::Tuple
+end
+
+struct _MimicChargeAction
+    layout::FlavorLayout
+end
+
+function GraftImpurityProblems.action_identity(action::_OpaqueAction)
+    return SymmetryActionIdentity(
+        :opaque, action.layout, (Val(:opaque),),
+        _OpaqueActionSemantics((1,)),
+    )
+end
+
+
+function GraftImpurityProblems.action_identity(action::_MimicChargeAction)
+    return SymmetryActionIdentity(
+        :charge, action.layout, (U1Irrep,),
+        _OpaqueActionSemantics((2,)),
+    )
+end
+
+mutable struct _FieldlessMutableInteraction{L<:FlavorLayout} <:
+        AbstractImpurityInteraction
+    basis::L
+    coefficient::Float64
+end
+
+GraftImpurityFoundations.interaction_layout(
+    interaction::_FieldlessMutableInteraction,
+) = interaction.basis
+GraftImpurityFoundations.interaction_identity(
+    interaction::_FieldlessMutableInteraction,
+) = (
+    family=:fieldless_mutable_test,
+    layout=interaction.basis,
+    coefficient=interaction.coefficient,
+)
+
+function GraftImpurityFoundations.lower_interaction(
+        interaction::_FieldlessMutableInteraction,
+        operators::ImpurityOperators, symmetry::SymmetrySpec)
+    reference = DensityDensityInteraction(
+        reshape(ComplexF64[interaction.coefficient], 1, 1),
+        interaction.basis,
+    )
+    return lower_interaction(reference, operators, symmetry)
+end
+
+@testset "TTNS immutable policy and workspace boundary" begin
+    problem = _solver_problem()
+    layout = problem_layout(problem)
+    solver = TTNSSolver(
+        ; topology_plan=T3NS(layout), carrier=ParticleNumberSector(),
+        compression_atol=1e-12,
+    )
+    @test !ismutabletype(typeof(solver))
+    @test fieldnames(typeof(solver)) ==
+        (:topology_plan, :bath_mapping, :carrier, :ttno_builder,
+         :compression_atol, :scheme)
+    @test solver.carrier isa ParticleNumberSector
+    @test_throws ArgumentError TTNSSolver()
+    group = CayleyOwnershipGroup(:d, [1], [:d])
+    mapping = CayleyTreeKernel(ScalarCayley(), (group,))
+    @test_throws ArgumentError TTNSSolver(
+        ; topology_plan=T3NS(layout), bath_mapping=mapping,
     )
 
-    solver, layout, operators = _solver_value()
-    h_loc = ImpurityOneBody(zeros(ComplexF64, 1, 1), layout)
-    delta = _solver_hybridization_gf()
-    set_hybridization!(solver, delta; h_loc0=h_loc)
-    @test solver.input_kind === :hybridization
-    @test solver.input isa BathFitInput
-    @test solver.input.statistics === :fermion
-    @test solver.input.domain === :matsubara
-    @test solver.h_loc0 === h_loc
-    set_weiss!(solver, _solver_weiss_gf(); h_loc0=h_loc)
-    @test solver.input_kind === :weiss
-    @test solver.source_input !== solver.input
-    @test solver.expansion === nothing
-    set_hybridization!(solver, delta; h_loc0=h_loc)
-    @test solver.input_kind === :hybridization
-    block_solver, _, _ = _solver_value()
-    set_hybridization!(block_solver, BlockGf(:d => delta); h_loc0=h_loc)
-    @test Tuple(keys(block_solver.input.blocks)) == (:d,)
-    @test block_solver.source_input.source_template isa GreenFunc.BlockGf
-    @test_throws ArgumentError set_hybridization!(
-        block_solver, BlockGf(:wrong => delta); h_loc0=h_loc,
-    )
-    set_weiss!(block_solver, BlockGf(:d => _solver_weiss_gf()); h_loc0=h_loc)
-    @test block_solver.input_kind === :weiss
-    @test block_solver.source_input.source_template isa GreenFunc.BlockGf
-    @test block_solver.input.source_template isa GreenFunc.BlockGf
+    workspace = TTNSWorkspace()
+    other = TTNSWorkspace()
+    @test workspace isa AbstractImpurityWorkspace
+    @test workspace.mounted === workspace.lowered === workspace.warm_start === nothing
+    @test other.mounted === other.last_result === nothing
+    @test isempty(workspace.scan_lanes)
 
-    multi_layout = FlavorLayout(
-        [:a, :b], Dict(:a => :imp_a, :b => :imp_b),
-        Dict(:imp_a => [:a], :imp_b => [:b]); basis=:solver_multiblock,
-    )
-    multi_partition = Partition(:a => [:a], :b => [:b])
-    multi_ops = ImpurityOperators(multi_layout; sector=ParticleNumberSector())
-    multi_solver = TTNSSolver(
-        ; gf_struct=multi_partition, layout=multi_layout,
-        topology_plan=T3NS(multi_layout), bath_fit_kernel=_SolverSyntheticKernel(
-            0.2, 0.16 + 0im,
-        ), ops=multi_ops,
-    )
-    multi_hloc = ImpurityOneBody(zeros(ComplexF64, 2, 2), multi_layout)
-    multi_source = BlockGf(:a => delta, :b => delta)
-    set_hybridization!(multi_solver, multi_source; h_loc0=multi_hloc)
-    @test Tuple(keys(multi_solver.input.blocks)) == (:a, :b)
-    @test Tuple(keys(multi_solver.source_input.blocks)) == (:a, :b)
-    cross_block_hloc = ImpurityOneBody(
-        ComplexF64[0 0.1; 0.1 0], multi_layout,
-    )
-    @test_throws ArgumentError set_weiss!(
-        multi_solver, multi_source; h_loc0=cross_block_hloc,
+    target = _charge_target(problem, 0)
+    request = TTNSSolveRequest(target)
+    @test request.manifold === target
+    @test_throws ArgumentError TTNSSolveRequest(
+        target; real_time=:invalid,
     )
 
-    weiss_solver, _, _ = _solver_value()
-    set_weiss!(weiss_solver, _solver_weiss_gf(); h_loc0=h_loc)
-    @test weiss_solver.input_kind === :weiss
-    @test weiss_solver.source_input !== weiss_solver.input
-    @test weiss_solver.source_input.source_template isa GreenFunc.Gf
-    @test weiss_solver.input.source_template isa GreenFunc.Gf
-    expected_delta = ComplexF64[
-        0.16 / (im * frequency - 0.2)
-        for frequency in weiss_solver.input.frequencies
-    ]
-    @test [only(sample) for sample in weiss_solver.input.blocks.d] ≈ expected_delta
-    near_singular = Gf(
-        ImFreq(10.0, true; grid=[0]); data=ComplexF64[1e-320],
-        statistics=true, component=:matsubara,
+    invalid_scan_workspace = TTNSWorkspace()
+    invalid_scan = IrrepScan(only(symmetry_actions(problem.symmetry)),
+                             (U1Irrep(0), :opaque))
+    @test_throws TTNSCapabilityError solve!(
+        invalid_scan_workspace, solver, problem,
+        TTNSSolveRequest(invalid_scan),
     )
-    @test_throws ArgumentError set_weiss!(weiss_solver, near_singular; h_loc0=h_loc)
-    @test_throws ArgumentError set_weiss!(
-        weiss_solver, Gf(ImFreq(10.0, false; grid=[0, 1]);
-                          data=ComplexF64[1, 1], statistics=false,
-                          component=:matsubara); h_loc0=h_loc,
+    @test invalid_scan_workspace.mounted === nothing
+    @test invalid_scan_workspace.problem_identity === nothing
+    @test isempty(invalid_scan_workspace.scan_lanes)
+
+    opaque_action = _OpaqueAction(layout)
+    opaque_problem = ImpurityProblem(
+        problem.bath, problem.h_loc, problem.interaction,
+        ImpuritySymmetryDeclaration((opaque_action,)),
+    )
+    opaque_workspace = TTNSWorkspace()
+    @test_throws TTNSCapabilityError solve!(
+        opaque_workspace, solver, opaque_problem,
+        TTNSSolveRequest(TargetIrrep(opaque_action, :q)),
+    )
+    @test opaque_workspace.mounted === nothing
+    @test opaque_workspace.problem_identity === nothing
+
+    flavor_action = FlavorU1(:spin, [1.0], layout)
+    multi_action_problem = ImpurityProblem(
+        problem.bath, problem.h_loc, problem.interaction,
+        ImpuritySymmetryDeclaration((ChargeU1(layout), flavor_action)),
+    )
+    multi_action_workspace = TTNSWorkspace()
+    @test_throws TTNSCapabilityError solve!(
+        multi_action_workspace, solver, multi_action_problem,
+        TTNSSolveRequest(TargetIrrep(ChargeU1(layout), U1Irrep(0))),
+    )
+    @test multi_action_workspace.mounted === nothing
+    @test multi_action_workspace.problem_identity === nothing
+
+    axial = FlavorU1(:sz, [1.0], layout)
+    su2 = SU2Reduce(layout; axial_generator=axial)
+    su2_problem = ImpurityProblem(
+        problem.bath, problem.h_loc, problem.interaction,
+        ImpuritySymmetryDeclaration((su2,)),
+    )
+    su2_workspace = TTNSWorkspace()
+    @test_throws TTNSCapabilityError solve!(
+        su2_workspace, solver, su2_problem,
+        TTNSSolveRequest(TargetIrrep(su2, SU2Irrep(0))),
+    )
+    @test su2_workspace.mounted === nothing
+    @test su2_workspace.problem_identity === nothing
+end
+
+@testset "extension interaction identity invalidates TTNS build" begin
+    baseline = _solver_problem()
+    layout = problem_layout(baseline)
+    interaction = _FieldlessMutableInteraction(layout, 0.0)
+    problem = ImpurityProblem(
+        baseline.bath, baseline.h_loc, interaction,
+    )
+    solver = TTNSSolver(
+        ; topology_plan=T3NS(layout), compression_atol=1e-12,
+    )
+    target = _charge_target(problem, 0)
+    request = TTNSSolveRequest(
+        target; ground_state=GroundStateRequest(
+            trunc=TruncationScheme(maxdim=4), nsweeps=1, krylovdim=4,
+        ),
+    )
+    initial, _ = _solver_initial_state(problem, solver)
+    workspace = TTNSWorkspace()
+    first_result = solve!(
+        workspace, solver, problem, request; initial_state=initial,
+    )
+    @test first_result.lowered.interaction === interaction
+    first_problem_identity = problem_identity(problem)
+    first_lowered = workspace.lowered
+
+    interaction.coefficient = 0.25
+    @test problem_identity(problem) != first_problem_identity
+    @test_throws ArgumentError solve!(workspace, solver, problem, request)
+    @test workspace.problem_identity == problem_identity(problem)
+    @test workspace.lowered !== first_lowered
+    @test workspace.warm_start === nothing
+    rebuilt = solve!(
+        workspace, solver, problem, request; initial_state=initial,
+    )
+    @test rebuilt.lowered.interaction === interaction
+    @test rebuilt.problem_identity != first_result.problem_identity
+end
+
+@testset "TTNS bounded ChargeU1 scan execution" begin
+    problem = _solver_problem()
+    layout = problem_layout(problem)
+    action = only(symmetry_actions(problem.symmetry))
+    solver = TTNSSolver(
+        ; topology_plan=T3NS(layout), compression_atol=1e-12,
+    )
+    target0 = TargetIrrep(action, U1Irrep(0))
+    target1 = TargetIrrep(action, U1Irrep(1))
+    scan = IrrepScan(action, (target0.target, target1.target))
+    operators = ImpurityOperators(layout; sector=ParticleNumberSector())
+    observable = LocalObservable(
+        :occupation, :imp => site_operators(operators, :imp).N[1],
+    )
+    ground_state = GroundStateRequest(
+        trunc=TruncationScheme(maxdim=4), nsweeps=2,
+        tolerance=1e-11, krylovdim=4,
     )
 
-    observable = LocalObservable(:occupation,
-                                 :imp => site_operators(operators, :imp).N[1])
+    density = LocalCorrelator(
+        :density, target0,
+        :imp => site_operators(operators, :imp).N[1],
+        :imp => site_operators(operators, :imp).N[1],
+    )
+    unsupported_workspace = TTNSWorkspace()
+    @test_throws TTNSCapabilityError solve!(
+        unsupported_workspace, solver, problem,
+        TTNSSolveRequest(scan; correlators=(density,)),
+    )
+    @test unsupported_workspace.mounted === nothing
+    @test unsupported_workspace.problem_identity === nothing
+    @test isempty(unsupported_workspace.scan_lanes)
+
+    initial0, _ = _solver_initial_state(problem, solver)
+    initial1, _ = _solver_initial_state(problem, solver; occupied_site=:imp)
+    workspace = TTNSWorkspace()
+    request = TTNSSolveRequest(
+        scan; ground_state, observables=(observable,),
+    )
+    result = solve!(
+        workspace, solver, problem, request;
+        initial_states=(initial0, initial1),
+    )
+    @test result isa TTNSScanResult
+    @test result.targets == (U1Irrep(0), U1Irrep(1))
+    @test result.results[1].request.manifold == target0
+    @test result.results[2].request.manifold == target1
+    @test result[U1Irrep(0)] === result.results[1]
+    @test result[U1Irrep(1)] === result.results[2]
+    @test result.results[1].energy ≈ 0.0 atol=1e-10
+    @test result.results[2].energy ≈
+        0.1 - sqrt(0.17) atol=1e-8
+    @test result.results[1].observables.occupation ≈ 0.0 atol=1e-10
+    @test length(workspace.scan_lanes) == 2
+
+    lane0 = workspace.scan_lanes[target0]
+    lane1 = workspace.scan_lanes[target1]
+    @test lane0 !== lane1
+    @test lane0.lowered !== lane1.lowered
+    @test lane0.warm_start !== lane1.warm_start
+    @test lane0.manifold_identity == manifold_identity(target0)
+    @test lane1.manifold_identity == manifold_identity(target1)
+    @test lane0.warm_identity != lane1.warm_identity
+    cached0 = lane0.lowered
+    cached1 = lane1.lowered
+
+    warm = solve!(workspace, solver, problem, request)
+    @test warm.targets == result.targets
+    @test workspace.scan_lanes[target0] === lane0
+    @test workspace.scan_lanes[target1] === lane1
+    @test lane0.lowered === cached0
+    @test lane1.lowered === cached1
+
+    parent_last_result = workspace.last_result
+    lane0_warm = lane0.warm_start
+    lane1_warm = lane1.warm_start
+    lane0_last_result = lane0.last_result
+    lane1_last_result = lane1.last_result
+    @test_throws ArgumentError solve!(
+        workspace, solver, problem, request;
+        initial_states=(initial0, initial0),
+    )
+    @test workspace.last_result === parent_last_result
+    @test workspace.scan_lanes[target0] === lane0
+    @test workspace.scan_lanes[target1] === lane1
+    @test lane0.lowered === cached0
+    @test lane1.lowered === cached1
+    @test lane0.warm_start === lane0_warm
+    @test lane1.warm_start === lane1_warm
+    @test lane0.last_result === lane0_last_result
+    @test lane1.last_result === lane1_last_result
+
+    wrong_eltype, _ = _solver_initial_state(
+        problem, solver; occupied_site=:imp, T=ComplexF32,
+    )
+    @test_throws ArgumentError solve!(
+        workspace, solver, problem, request;
+        initial_states=(initial0, wrong_eltype),
+    )
+    @test workspace.last_result === parent_last_result
+    @test lane0.lowered === cached0
+    @test lane1.lowered === cached1
+    @test lane0.warm_start === lane0_warm
+    @test lane1.warm_start === lane1_warm
+
+    reversed_scan = IrrepScan(action, (U1Irrep(1), U1Irrep(0)))
+    reversed = solve!(
+        workspace, solver, problem,
+        TTNSSolveRequest(reversed_scan; ground_state, observables=(observable,)),
+    )
+    @test reversed.targets == (U1Irrep(1), U1Irrep(0))
+    @test reversed.results[1].request.manifold == target1
+    @test reversed.results[2].request.manifold == target0
+    @test workspace.scan_lanes[target0] === lane0
+    @test workspace.scan_lanes[target1] === lane1
+end
+
+@testset "TTNS problem execution and cache identities" begin
+    problem = _solver_problem()
+    layout = problem_layout(problem)
+    solver = TTNSSolver(
+        ; topology_plan=T3NS(layout), compression_atol=1e-12,
+    )
+    target = _charge_target(problem, 0)
+    operators = ImpurityOperators(layout; sector=ParticleNumberSector())
+    observable = LocalObservable(
+        :occupation, :imp => site_operators(operators, :imp).N[1],
+    )
     correlator = LocalCorrelator(
         :particle,
+        _charge_target(problem, 1),
         :imp => local_annihilator(site_operators(operators, :imp), :d),
         :imp => local_creator(site_operators(operators, :imp), :d),
     )
-    real = RealTimeRequest([0.0, 0.05];
-                            evolver=GlobalKrylov(krylovdim=4, maxiter=10,
-                                                 fit_nsweeps=1, fit_tol=1e-10))
+    @test correlator.response_target == _charge_target(problem, 1)
+    @test_throws MethodError LocalCorrelator(
+        :missing_response,
+        :imp => local_annihilator(site_operators(operators, :imp), :d),
+        :imp => local_creator(site_operators(operators, :imp), :d),
+    )
+
+    wrong_reachability = LocalCorrelator(
+        :wrong_reachability, target,
+        :imp => local_annihilator(site_operators(operators, :imp), :d),
+        :imp => local_creator(site_operators(operators, :imp), :d),
+    )
+    wrong_reachability_workspace = TTNSWorkspace()
+    @test_throws ResponseReachabilityError solve!(
+        wrong_reachability_workspace, solver, problem,
+        TTNSSolveRequest(target; correlators=(wrong_reachability,)),
+    )
+    @test wrong_reachability_workspace.mounted === nothing
+    @test wrong_reachability_workspace.problem_identity === nothing
+
+    wrong_closure = LocalCorrelator(
+        :wrong_closure, _charge_target(problem, 1),
+        :imp => local_creator(site_operators(operators, :imp), :d),
+        :imp => local_creator(site_operators(operators, :imp), :d),
+    )
+    wrong_closure_workspace = TTNSWorkspace()
+    @test_throws ResponseReachabilityError solve!(
+        wrong_closure_workspace, solver, problem,
+        TTNSSolveRequest(target; correlators=(wrong_closure,)),
+    )
+    @test wrong_closure_workspace.mounted === nothing
+    @test wrong_closure_workspace.problem_identity === nothing
+
+    mimic = _MimicChargeAction(layout)
+    wrong_action_response = LocalCorrelator(
+        :wrong_action,
+        TargetIrrep(mimic, U1Irrep(1)),
+        :imp => local_annihilator(site_operators(operators, :imp), :d),
+        :imp => local_creator(site_operators(operators, :imp), :d),
+    )
+    wrong_action_workspace = TTNSWorkspace()
+    @test_throws TTNSCapabilityError solve!(
+        wrong_action_workspace, solver, problem,
+        TTNSSolveRequest(target; correlators=(wrong_action_response,)),
+    )
+    @test wrong_action_workspace.mounted === nothing
+    @test wrong_action_workspace.problem_identity === nothing
+
+    wrong_basis_layout = FlavorLayout(
+        [:d], Dict(:d => :imp), Dict(:imp => [:d]);
+        basis=:wrong_response_basis,
+    )
+    wrong_basis_identity = SymmetryActionIdentity(
+        :charge, wrong_basis_layout, (U1Irrep,),
+        ChargeU1ActionSemantics((1,)),
+    )
+    wrong_basis_response = LocalCorrelator(
+        :wrong_basis, TargetIrrep(wrong_basis_identity, U1Irrep(1)),
+        :imp => local_annihilator(site_operators(operators, :imp), :d),
+        :imp => local_creator(site_operators(operators, :imp), :d),
+    )
+    wrong_basis_workspace = TTNSWorkspace()
+    @test_throws TTNSCapabilityError solve!(
+        wrong_basis_workspace, solver, problem,
+        TTNSSolveRequest(target; correlators=(wrong_basis_response,)),
+    )
+    @test wrong_basis_workspace.mounted === nothing
+    @test wrong_basis_workspace.problem_identity === nothing
+
+    wrong_product_identity = SymmetryActionIdentity(
+        :charge, layout, (U1Irrep, Val(:extra)),
+        ChargeU1ActionSemantics((1,)),
+    )
+    wrong_product_response = LocalCorrelator(
+        :wrong_product, TargetIrrep(wrong_product_identity, U1Irrep(1)),
+        :imp => local_annihilator(site_operators(operators, :imp), :d),
+        :imp => local_creator(site_operators(operators, :imp), :d),
+    )
+    wrong_product_workspace = TTNSWorkspace()
+    @test_throws TTNSCapabilityError solve!(
+        wrong_product_workspace, solver, problem,
+        TTNSSolveRequest(target; correlators=(wrong_product_response,)),
+    )
+    @test wrong_product_workspace.mounted === nothing
+    @test wrong_product_workspace.problem_identity === nothing
+
+    opaque_response = LocalCorrelator(
+        :opaque_response,
+        TargetIrrep(only(symmetry_actions(problem.symmetry)), :opaque),
+        :imp => local_annihilator(site_operators(operators, :imp), :d),
+        :imp => local_creator(site_operators(operators, :imp), :d),
+    )
+    opaque_response_workspace = TTNSWorkspace()
+    @test_throws TTNSCapabilityError solve!(
+        opaque_response_workspace, solver, problem,
+        TTNSSolveRequest(target; correlators=(opaque_response,)),
+    )
+    @test opaque_response_workspace.mounted === nothing
+    @test opaque_response_workspace.problem_identity === nothing
+
+    half_target_workspace = TTNSWorkspace()
+    half_target = TargetIrrep(
+        only(symmetry_actions(problem.symmetry)), U1Irrep(1 // 2),
+    )
+    @test_throws TTNSCapabilityError solve!(
+        half_target_workspace, solver, problem,
+        TTNSSolveRequest(half_target),
+    )
+    @test half_target_workspace.mounted === nothing
+    @test half_target_workspace.problem_identity === nothing
+    real = RealTimeRequest(
+        [0.0, 0.05];
+        evolver=GlobalKrylov(krylovdim=4, maxiter=10,
+                             fit_nsweeps=1, fit_tol=1e-10),
+    )
     contour = ComplexTimeRequest(
         ComplexTimeSegment(-0.05im, 1; label=:real_axis);
         evolver=GlobalKrylov(krylovdim=4, maxiter=10,
                              fit_nsweeps=1, fit_tol=1e-10),
     )
     request = TTNSSolveRequest(
-        ; ground_state=GroundStateRequest(
-            trunc=TruncationScheme(maxdim=4), nsweeps=2, tolerance=1e-10,
-            krylovdim=4,
+        target;
+        ground_state=GroundStateRequest(
+            trunc=TruncationScheme(maxdim=4), nsweeps=2,
+            tolerance=1e-10, krylovdim=4,
         ),
         real_time=real, complex_time=contour,
         observables=(observable,), correlators=(correlator,),
     )
-    initial = _solver_initial_state(layout)
-    @test_throws ArgumentError GroundStateResult(initial, Inf, [0.0])
-    @test_throws ArgumentError GroundStateResult(initial, 0.0, [Inf])
-    block_weiss_result = solve!(
-        block_solver, DensityDensityInteraction(zeros(1, 1), layout),
-        TTNSSolveRequest(; ground_state=GroundStateRequest(
-            trunc=TruncationScheme(maxdim=4), nsweeps=1, krylovdim=4,
-        )); initial_state=_solver_initial_state(layout),
-    )
-    @test block_weiss_result isa TTNSSolveResult
-    @test block_weiss_result.input_kind === :weiss
-    @test block_weiss_result.source_input === block_solver.source_input
-    @test block_weiss_result.input === block_solver.input
-    @test block_weiss_result.source_input !== block_weiss_result.input
-    @test block_weiss_result.source_input.source_template isa GreenFunc.BlockGf
-    @test block_weiss_result.input.source_template isa GreenFunc.BlockGf
+    initial, _ = _solver_initial_state(problem, solver)
+    workspace = TTNSWorkspace()
+    result = solve!(workspace, solver, problem, request; initial_state=initial)
 
-    result = solve!(solver, DensityDensityInteraction(zeros(1, 1), layout),
-                    request; initial_state=initial)
     @test result isa TTNSSolveResult
-    @test solver.last_result === result
-    @test solver.last_request === request
-    @test result.ground_state.state isa TTNS
+    @test workspace.last_result === result
+    @test workspace.last_request === request
+    @test workspace.ops isa ImpurityOperators
+    @test result.problem_identity == problem_identity(problem)
+    @test result.manifold_identity == manifold_identity(target)
+    @test result.request_identity == workspace.request_identity
+    @test result.policy_identity == workspace.policy_identity
     @test result.energy == result.ground_state.energy
     @test result.observables.occupation isa ComplexF64
     @test result.real_time.particle.convention === :raw_correlator
-    @test result.real_time.particle.contour === :real_time
-    @test result.complex_time.particle.convention === :raw_correlator
     @test result.complex_time.particle.metadata.segment_labels ==
-          (:initial, :real_axis)
-    @test result.complex_time.particle.z_grid == ComplexF64[0, -0.05im]
+        (:initial, :real_axis)
     @test result.real_time.particle.z_grid == result.complex_time.particle.z_grid
-    @test result.real_time.particle.metadata.coordinate === :core_step
-    @test result.complex_time.particle.values ≈ result.real_time.particle.values atol=1e-8
-    @test !result.bathfit_audit.passed
-    @test any(item -> item.criterion === :request_horizon_to_revival,
-              result.bathfit_audit.violations)
+    @test result.complex_time.particle.values ≈
+        result.real_time.particle.values atol=1e-8
+    @test !hasfield(typeof(result), :source_input)
+    @test !hasfield(typeof(result), :discretization)
+    @test !hasfield(typeof(result), :bathfit_audit)
 
     tilted = ComplexTimeRequest(
         ComplexTimeSegment(-0.02 - 0.05im, 1; label=:tilted);
         evolver=DirectKrylovBootstrap(krylovdim=4, max_basis=4),
     )
-    parallel = ComplexTimeRequest(
-        (ComplexTimeSegment(-0.02, 1; label=:parallel_offset),
-         ComplexTimeSegment(-0.05im, 1; label=:parallel_real));
-        evolver=DirectKrylovBootstrap(krylovdim=4, max_basis=4),
+    raw = GraftImpuritySolver._solver_complex_time(
+        result.ground_state.state, result.energy, result.lowered,
+        tilted, (correlator,),
     )
-    kink = ComplexTimeRequest(
-        (ComplexTimeSegment(-0.02, 1; label=:kink_imaginary),
-         ComplexTimeSegment(-0.05im, 1; label=:kink_real),
-         ComplexTimeSegment(-0.01, 1; label=:kink_return));
-        evolver=DirectKrylovBootstrap(krylovdim=4, max_basis=4),
-    )
-    for (request_value, labels, expected_grid) in (
-        (tilted, (:initial, :tilted), ComplexF64[0, -0.02 - 0.05im]),
-        (parallel, (:initial, :parallel_offset, :parallel_real),
-         ComplexF64[0, -0.02, -0.02 - 0.05im]),
-        (kink, (:initial, :kink_imaginary, :kink_real, :kink_return),
-         ComplexF64[0, -0.02, -0.02 - 0.05im, -0.03 - 0.05im]),
-    )
-        raw = GraftImpuritySolver._solver_complex_time(
-            result.ground_state.state, result.energy, result.lowered,
-            request_value, (correlator,),
-        )
-        @test raw.particle.convention === :raw_correlator
-        @test raw.particle.metadata.segment_labels == labels
-        @test raw.particle.z_grid == expected_grid
-        @test raw.particle.values ≈ _solver_exact_complex_correlator(
-            result.ground_state.state, result.energy, result.lowered,
-            correlator, expected_grid,
-        ) atol=1e-7 rtol=1e-7
-    end
+    @test raw.particle.values ≈ _solver_exact_complex_correlator(
+        result.ground_state.state, result.energy, result.lowered,
+        correlator, raw.particle.z_grid,
+    ) atol=1e-7 rtol=1e-7
 
-    set_hybridization!(solver, delta; h_loc0=h_loc)
-    @test solver.last_result === nothing
-    @test solver.warm_start === nothing
-    @test solver.lowered === nothing
-    refreshed_result = solve!(
-        solver, DensityDensityInteraction(zeros(1, 1), layout), request;
-        initial_state=_solver_initial_state(layout),
-    )
-    @test refreshed_result isa TTNSSolveResult
+    cached_lowered = workspace.lowered
+    warm = solve!(workspace, solver, problem, request)
+    @test warm.warm_identity == result.warm_identity
+    @test workspace.lowered === cached_lowered
 
-    warm_result = solve!(solver, DensityDensityInteraction(zeros(1, 1), layout),
-                         request)
-    @test warm_result isa TTNSSolveResult
-    @test warm_result.warm_identity == refreshed_result.warm_identity
-    changed = DensityDensityInteraction(reshape([0.3], 1, 1), layout)
-    @test_throws ArgumentError solve!(solver, changed, request)
-    @test solver.last_result === nothing
-    @test solver.warm_start === nothing
-    @test solver.lowered === nothing
-    @test_throws ArgumentError solve!(
-        solver, DensityDensityInteraction(zeros(1, 1), layout),
-        TTNSSolveRequest();
-        initial_state=_solver_initial_state(layout; T=ComplexF32),
-    )
-    set_hybridization!(solver, delta; h_loc0=h_loc)
-    @test solver.last_result === nothing
-    @test solver.warm_start === nothing
-
-    implicit_request = TTNSSolveRequest(
-        ; complex_time=ComplexTimeRequest(
-            (ComplexTimeSegment(-0.02, 1; label=:imaginary),
-             ComplexTimeSegment(-0.05im, 1; label=:real));
-            evolver=ImplicitLogTime(),
-        ),
-        correlators=(correlator,),
+    changed_request = TTNSSolveRequest(
+        target;
+        ground_state=request.ground_state,
+        observables=(observable,),
     )
     @test_throws ArgumentError solve!(
-        solver, DensityDensityInteraction(zeros(1, 1), layout), implicit_request;
-        initial_state=_solver_initial_state(layout),
+        workspace, solver, problem, changed_request,
     )
-    implicit_real_request = TTNSSolveRequest(
-        ; real_time=RealTimeRequest([0.0, 0.05]; evolver=ImplicitLogTime()),
-        correlators=(correlator,),
+    @test workspace.lowered === cached_lowered
+    @test workspace.warm_start === nothing
+    refreshed = solve!(
+        workspace, solver, problem, changed_request; initial_state=initial,
     )
-    @test_throws ArgumentError solve!(
-        solver, DensityDensityInteraction(zeros(1, 1), layout), implicit_real_request;
-        initial_state=_solver_initial_state(layout),
-    )
+    @test refreshed.request_identity != result.request_identity
+    @test workspace.lowered === cached_lowered
 
-    thermal_density = LocalCorrelator(
+    changed_problem = _solver_problem(h_loc=reshape(ComplexF64[0.1], 1, 1))
+    @test_throws ArgumentError solve!(
+        workspace, solver, changed_problem,
+        TTNSSolveRequest(_charge_target(changed_problem, 0);
+                         ground_state=request.ground_state),
+    )
+    @test workspace.problem_identity == problem_identity(changed_problem)
+    @test workspace.warm_start === nothing
+
+    isolated = TTNSWorkspace()
+    @test isolated.mounted === isolated.lowered === isolated.last_result === nothing
+end
+
+@testset "TTNS finite-temperature and topology routes" begin
+    problem = _solver_problem()
+    layout = problem_layout(problem)
+    target = _charge_target(problem, 0)
+    operators = ImpurityOperators(layout; sector=ParticleNumberSector())
+    density = LocalCorrelator(
         :density,
+        target,
         :imp => site_operators(operators, :imp).N[1],
         :imp => site_operators(operators, :imp).N[1],
     )
+
+    t3ns = TTNSSolver(; topology_plan=T3NS(layout), compression_atol=1e-12)
+    initial, _ = _solver_initial_state(problem, t3ns)
     finite_request = TTNSSolveRequest(
-        ; ground_state=GroundStateRequest(
+        target;
+        ground_state=GroundStateRequest(
             trunc=TruncationScheme(maxdim=4), nsweeps=1, krylovdim=4,
         ),
         imaginary_time=ImaginaryTimeRequest(
@@ -450,133 +626,68 @@ end
             evolver=TDVP1(krylovdim=4, verbose=false),
             thermal_nsteps=1, propagation_nsteps=1,
         ),
-        correlators=(thermal_density,),
+        correlators=(density,),
     )
-    finite_result = solve!(
-        solver, DensityDensityInteraction(zeros(1, 1), layout), finite_request;
-        initial_state=_solver_initial_state(layout),
+    finite = solve!(
+        TTNSWorkspace(), t3ns, problem, finite_request; initial_state=initial,
     )
-    @test finite_result.imaginary_time isa ImaginaryTimeResult
-    @test finite_result.imaginary_time.temperature.beta_eff == 1.0
-    @test finite_result.imaginary_time.correlators.density.convention ===
-          :raw_correlator
-    @test finite_result.imaginary_time.correlators.density.metadata.coordinate === :tau
-    # The TTNSSolver owns topology/physical-space assembly and exact request
-    # forwarding; core's dedicated thermal suites own the TDVP-versus-ED
-    # convergence evidence. Reproduce the same core trajectory independently
-    # so a wrong beta, save grid, evolver, or insertion cannot pass here.
-    direct_problem = purification_problem(
-        finite_result.lowered.opsum, finite_result.lowered.mounted.topology,
-        GraftImpuritySolver._mounted_physical_spaces(finite_result.lowered.mounted);
-        hermitian=true,
-    )
-    direct_trajectory = thermalize(
-        Purified(), direct_problem, 1.0;
-        evolver=finite_request.imaginary_time.evolver, nsteps=1,
-        save_betas=[0.5, 1.0],
-    )
-    direct_series = thermal_correlator(
-        Purified(), direct_problem,
-        thermal_density.left_site => thermal_density.left,
-        thermal_density.right_site => thermal_density.right,
-        1.0, [0.0, 0.5];
-        evolver=finite_request.imaginary_time.evolver,
-        trajectory=direct_trajectory, prop_nsteps=1,
-    )
-    @test finite_result.imaginary_time.trajectory.final.logZ ≈
-          direct_trajectory.final.logZ atol=1e-12
-    @test finite_result.imaginary_time.correlators.density.values ≈
-          direct_series.values atol=1e-12
+    @test finite.imaginary_time isa ImaginaryTimeResult
+    @test finite.imaginary_time.temperature.beta_eff == 1.0
+    @test finite.imaginary_time.correlators.density.metadata.coordinate === :tau
 
-    ftps_solver, _, _ = _solver_value(topology_plan=FTPS(layout))
-    set_hybridization!(ftps_solver, delta; h_loc0=h_loc)
+    ftps = TTNSSolver(; topology_plan=FTPS(layout), compression_atol=1e-12)
+    ftps_initial, _ = _solver_initial_state(problem, ftps)
     ftps_result = solve!(
-        ftps_solver, DensityDensityInteraction(zeros(1, 1), layout),
-        TTNSSolveRequest(; ground_state=GroundStateRequest(
+        TTNSWorkspace(), ftps, problem,
+        TTNSSolveRequest(target; ground_state=GroundStateRequest(
             trunc=TruncationScheme(maxdim=4), nsweeps=1, krylovdim=4,
-        )); initial_state=_solver_initial_state(layout),
+        )); initial_state=ftps_initial,
     )
-    @test ftps_result isa TTNSSolveResult
     @test ftps_result.mounted.topology == impurity_topology(
-        FTPS(layout), _solver_partition(), ftps_result.discretization.bath,
+        FTPS(layout), problem_partition(problem), problem.bath,
     )
-
-    nonmountable_solver, _, _ = _solver_value(kernel=_SolverNonMountableKernel())
-    set_hybridization!(nonmountable_solver, delta; h_loc0=h_loc)
-    nonmountable = solve!(
-        nonmountable_solver, DensityDensityInteraction(zeros(1, 1), layout),
-        TTNSSolveRequest(),
-    )
-    @test nonmountable isa TTNSNonMountableSolveResult
-    @test nonmountable_solver.last_result === nonmountable
-    @test nonmountable.discretization isa NonMountablePoleFit
 
     group = CayleyOwnershipGroup(:d, [1], [:d])
     mapping = CayleyTreeKernel(ScalarCayley(), (group,))
-    @test_throws ArgumentError TTNSSolver(
-        ; gf_struct=_solver_partition(), layout, topology_plan=T3NS(layout),
-        bath_mapping=mapping, bath_fit_kernel=_SolverSyntheticKernel(0.2, 0.16im),
-        ops=operators,
+    cayley = TTNSSolver(; bath_mapping=mapping, compression_atol=1e-12)
+    cayley_initial, cayley_mounted = _solver_initial_state(
+        problem, cayley; occupied_site=:imp,
     )
-    mapped_solver, _, _ = _solver_value(bath_mapping=mapping)
-    set_hybridization!(mapped_solver, delta; h_loc0=h_loc)
-    mapped_initial, mapped_mounted = _solver_mapped_initial_state(
-        mapped_solver, mapping,
-    )
-    one_particle = FermionParity(1) ⊠ U1Irrep(1)
-    @test collect(sectors(domain(
-        mapped_initial.tensors[mapped_initial.topo.root],
-    )[1])) == [one_particle]
-    mapped_result = solve!(
-        mapped_solver, DensityDensityInteraction(zeros(1, 1), layout),
-        TTNSSolveRequest(; ground_state=GroundStateRequest(
+    one_particle_request = TTNSSolveRequest(
+        _charge_target(problem, 1);
+        ground_state=GroundStateRequest(
             trunc=TruncationScheme(maxdim=4), nsweeps=2, krylovdim=4,
-        )); initial_state=mapped_initial,
+        ),
     )
-    @test mapped_result isa TTNSSolveResult
-    @test mapped_result.mounted isa CayleyAndersonBath
-    @test mapped_result.mounted.topology == mapped_mounted.topology
-    @test mapped_solver.mapping_result isa CayleyMappingResult
-    @test mapped_solver.mapping_result === mapped_result.mounted.mapping
-    @test collect(sectors(domain(
-        mapped_result.ground_state.state.tensors[
-            mapped_result.ground_state.state.topo.root,
-        ],
-    )[1])) == [one_particle]
+    cayley_workspace = TTNSWorkspace()
+    cayley_result = solve!(
+        cayley_workspace, cayley, problem, one_particle_request;
+        initial_state=cayley_initial,
+    )
+    @test cayley_result.mounted isa CayleyAndersonBath
+    @test cayley_result.mounted.topology == cayley_mounted.topology
+    @test cayley_workspace.mapping_result === cayley_result.mounted.mapping
 
+    block_problem = _solver_block_problem()
+    block_layout = problem_layout(block_problem)
     block_group = CayleyOwnershipGroup(:spin, [1, 2], [:up, :down])
     block_mapping = CayleyTreeKernel(BlockCayley(), (block_group,))
-    mapped_block_solver, block_layout, _ = _solver_block_value(block_mapping)
-    block_hloc = ImpurityOneBody(zeros(ComplexF64, 2, 2), block_layout)
-    set_hybridization!(
-        mapped_block_solver,
-        BlockGf(:spin => _solver_block_hybridization_gf()); h_loc0=block_hloc,
+    block_solver = TTNSSolver(
+        ; bath_mapping=block_mapping, compression_atol=1e-12,
     )
-    mapped_block_initial, mapped_block_mounted = _solver_mapped_initial_state(
-        mapped_block_solver, block_mapping,
+    block_initial, block_mounted = _solver_initial_state(
+        block_problem, block_solver; occupied_site=:up_site,
     )
-    @test mapped_block_mounted.mapping.mapped isa BlockCayleyBath
-    @test mapped_block_mounted.mapping.mapped.site_dimensions == [2]
-    @test length(only(mapped_block_mounted.site_modes)) == 2
-    @test collect(sectors(domain(
-        mapped_block_initial.tensors[mapped_block_initial.topo.root],
-    )[1])) == [one_particle]
-    mapped_block_result = solve!(
-        mapped_block_solver,
-        DensityDensityInteraction(zeros(2, 2), block_layout),
-        TTNSSolveRequest(; ground_state=GroundStateRequest(
-            trunc=TruncationScheme(maxdim=8), nsweeps=2, krylovdim=8,
-        )); initial_state=mapped_block_initial,
+    block_workspace = TTNSWorkspace()
+    block_result = solve!(
+        block_workspace, block_solver, block_problem,
+        TTNSSolveRequest(_charge_target(block_problem, 1);
+            ground_state=GroundStateRequest(
+                trunc=TruncationScheme(maxdim=8), nsweeps=2, krylovdim=8,
+            ));
+        initial_state=block_initial,
     )
-    @test mapped_block_result isa TTNSSolveResult
-    @test mapped_block_result.mounted isa CayleyAndersonBath
-    @test mapped_block_result.mounted.mapping.mapped isa BlockCayleyBath
-    @test mapped_block_result.mounted.topology == mapped_block_mounted.topology
-    @test mapped_block_solver.mapping_result ===
-          mapped_block_result.mounted.mapping
-    @test collect(sectors(domain(
-        mapped_block_result.ground_state.state.tensors[
-            mapped_block_result.ground_state.state.topo.root,
-        ],
-    )[1])) == [one_particle]
+    @test block_result.mounted isa CayleyAndersonBath
+    @test block_result.mounted.mapping.mapped isa BlockCayleyBath
+    @test block_result.mounted.topology == block_mounted.topology
 end

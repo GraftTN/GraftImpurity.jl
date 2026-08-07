@@ -41,3 +41,21 @@ bath_orbitals(bath::DiscreteBath) = bath.orbitals
 bath_statistics(bath::DiscreteBath) = bath.statistics
 
 Base.length(bath::DiscreteBath) = length(bath.orbitals)
+
+Base.:(==)(left::DiscreteBath, right::DiscreteBath) =
+    left.layout == right.layout &&
+    left.partition == right.partition &&
+    left.orbitals == right.orbitals &&
+    left.statistics == right.statistics
+
+Base.hash(bath::DiscreteBath, seed::UInt) = hash(
+    (bath.layout, bath.partition, bath.orbitals, bath.statistics),
+    hash(:DiscreteBath, seed),
+)
+
+function Base.copy(bath::DiscreteBath)
+    return DiscreteBath(
+        bath.layout, bath.partition, copy(bath.orbitals), bath.statistics,
+        Val(:validated),
+    )
+end

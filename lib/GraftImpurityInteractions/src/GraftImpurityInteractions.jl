@@ -9,13 +9,15 @@ using GraftImpurityFoundations: FlavorLayout, flavors, flavor_index,
     AbstractFermionSector, ParticleNumberSector, FermionSiteOperators,
     local_annihilator, local_creator
 import GraftImpurityFoundations: lower_interaction, audit_symmetry,
-    _charged_local_tensor
+    interaction_layout, interaction_identity, _charged_local_tensor
 
 export ImpurityOperators, site_operators,
     DensityDensityInteraction, KanamoriTerms, KanamoriFlavorMap,
     KanamoriInteraction, BareCoulombTensor, AntisymmetrizedVertex,
     FullCoulombInteraction, ImpurityOneBody, DensityDensityDecomposition,
-    split_density_density, lower_interaction, lower_one_body, one_body_opsum,
+    interaction_layout, interaction_identity, one_body_layout,
+    split_density_density,
+    lower_interaction, lower_one_body, one_body_opsum,
     rotate_one_body, rotate_interaction,
     ChargeU1, FlavorU1, SU2Reduce, SymmetrySpec, SymmetryAuditItem,
     SymmetryAudit, audit_symmetry

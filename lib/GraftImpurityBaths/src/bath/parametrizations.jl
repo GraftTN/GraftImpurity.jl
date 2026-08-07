@@ -228,3 +228,40 @@ function BathOrbitals(energies::AbstractVector{<:Real},
 end
 
 Base.length(orbitals::BathOrbitals) = length(orbitals.energies)
+
+Base.:(==)(left::BathOrbitals, right::BathOrbitals) =
+    left.energies == right.energies &&
+    left.couplings == right.couplings &&
+    left.pole_indices == right.pole_indices &&
+    left.block_indices == right.block_indices &&
+    left.associated_flavors == right.associated_flavors
+
+function _bath_sequence_hash(values, seed::UInt)
+    state = hash(length(values), seed)
+    for value in values
+        state = if value isa AbstractVector
+            _bath_sequence_hash(value, state)
+        else
+            hash(value, state)
+        end
+    end
+    return state
+end
+
+function Base.hash(orbitals::BathOrbitals, seed::UInt)
+    state = hash(:BathOrbitals, seed)
+    state = _bath_sequence_hash(orbitals.energies, state)
+    state = _bath_sequence_hash(orbitals.couplings, state)
+    state = _bath_sequence_hash(orbitals.pole_indices, state)
+    state = _bath_sequence_hash(orbitals.block_indices, state)
+    return _bath_sequence_hash(orbitals.associated_flavors, state)
+end
+
+function Base.copy(orbitals::BathOrbitals)
+    return BathOrbitals(
+        copy(orbitals.energies),
+        Vector{ComplexF64}[copy(coupling) for coupling in orbitals.couplings],
+        copy(orbitals.pole_indices), copy(orbitals.block_indices),
+        copy(orbitals.associated_flavors), Val(:validated),
+    )
+end

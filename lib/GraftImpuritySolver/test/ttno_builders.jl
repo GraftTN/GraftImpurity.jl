@@ -10,6 +10,7 @@ using GraftImpurityFoundations
 using GraftImpurityInteractions
 using GraftImpurityBaths
 using GraftImpurityBathFit
+using GraftImpurityProblems
 using GraftImpuritySolver
 using GreenFunc
 using GraftTestUtils: categorical_coordinates, product_ttns, to_dense
@@ -333,93 +334,59 @@ end
     @test occursin("LegacyTTNOBuilder()", sprint(showerror, error))
 end
 
-struct _TTNOBuilderSyntheticKernel <: AbstractRealPoleBathFitKernel
-    energy::Float64
-    residue::ComplexF64
-end
-
-function GraftImpurityFoundations.real_pole_bath_fit(
-        input::BathFitInput, kernel::_TTNOBuilderSyntheticKernel,
-        partition::Partition)
-    plan = DiscretizationPlan(
-        :d => BlockDiscretizationPlan(
-            [SpectralInterval(-1.0, 1.0, 1)],
-        );
-        shared_grid=true,
-    )
-    poles = BlockRealPoles(
-        input.layout, partition, [kernel.energy], ComplexF64[kernel.residue], [1];
-        statistics=:fermion,
-    )
-    return PoleExpansion(poles; kernel=:ttno_builder_synthetic, trace=(; plan))
-end
-
 function _ttnob_solver(builder=nothing)
     layout = FlavorLayout(
         [:d], Dict(:d => :imp), Dict(:imp => [:d]);
         basis=:ttno_builder_solver,
     )
     partition = Partition(:d => [:d])
-    operators = ImpurityOperators(layout; sector=ParticleNumberSector())
-    arguments = (
-        gf_struct=partition,
-        layout=layout,
-        topology_plan=T3NS(layout),
-        bath_fit_kernel=_TTNOBuilderSyntheticKernel(0.2, 0.16 + 0im),
-        ops=operators,
-        compression_atol=1e-12,
+    orbitals = BathOrbitals(
+        [0.2], [ComplexF64[0.4]], [1], [1], [:d]; layout, partition,
     )
+    bath = DiscreteBath(layout, partition, orbitals; statistics=:fermion)
+    problem = ImpurityProblem(
+        bath, ImpurityOneBody(zeros(ComplexF64, 1, 1), layout),
+        DensityDensityInteraction(zeros(ComplexF64, 1, 1), layout),
+    )
+    arguments = (topology_plan=T3NS(layout), compression_atol=1e-12)
     solver = builder === nothing ?
         TTNSSolver(; arguments...) :
         TTNSSolver(; arguments..., ttno_builder=builder)
-    mesh = ImFreq(8.0, true; grid=[-2, -1, 0, 1, 2])
-    delta = Gf(
-        mesh;
-        data=ComplexF64[0.16 / (im * mesh[index] - 0.2)
-                        for index in eachindex(mesh)],
-        statistics=true,
-        component=:matsubara,
-    )
-    h_loc = ImpurityOneBody(zeros(ComplexF64, 1, 1), layout)
-    set_hybridization!(solver, delta; h_loc0=h_loc)
-
-    topology = TreeTopology(:imp, [:imp => :bath_d_1])
-    impurity = site_operators(operators, :imp)
-    bath = FermionSiteOperators([:bath_mode]; sector=ParticleNumberSector())
-    physical = Dict(:imp => impurity.P, :bath_d_1 => bath.P)
+    mounted = mount_bath(impurity_topology(T3NS(layout), partition, bath), bath;
+                         sector=ParticleNumberSector())
+    physical = _ttnob_physical(mounted)
     vacuum = FermionParity(0) ⊠ U1Irrep(0)
     initial = product_ttns(
-        ComplexF64, topology, physical,
-        Dict(:imp => vacuum, :bath_d_1 => vacuum),
+        ComplexF64, mounted.topology, physical,
+        Dict(site => vacuum for site in keys(physical)),
     )
-    return solver, layout, initial
+    target = TargetIrrep(only(symmetry_actions(problem.symmetry)), U1Irrep(0))
+    return solver, problem, target, initial
 end
 
 @testset "TTNSSolver TTNO builder identity is warm-start relevant" begin
     explicit_builder = CompiledTTNOBuilder(merge=DirectSumMerge())
-    default_solver, default_layout, default_initial = _ttnob_solver()
-    explicit_solver, explicit_layout, explicit_initial =
+    default_solver, default_problem, default_target, default_initial = _ttnob_solver()
+    explicit_solver, explicit_problem, explicit_target, explicit_initial =
         _ttnob_solver(explicit_builder)
     @test default_solver.ttno_builder isa LegacyTTNOBuilder
     @test explicit_solver.ttno_builder == explicit_builder
 
-    request = TTNSSolveRequest(; ground_state=GroundStateRequest(
+    default_request = TTNSSolveRequest(default_target; ground_state=GroundStateRequest(
         trunc=TruncationScheme(maxdim=4),
         nsweeps=1,
         tolerance=1e-10,
         krylovdim=4,
         verbose=false,
     ))
+    explicit_request = TTNSSolveRequest(explicit_target;
+                                        ground_state=default_request.ground_state)
     default_result = solve!(
-        default_solver,
-        DensityDensityInteraction(zeros(ComplexF64, 1, 1), default_layout),
-        request;
+        TTNSWorkspace(), default_solver, default_problem, default_request;
         initial_state=default_initial,
     )
     explicit_result = solve!(
-        explicit_solver,
-        DensityDensityInteraction(zeros(ComplexF64, 1, 1), explicit_layout),
-        request;
+        TTNSWorkspace(), explicit_solver, explicit_problem, explicit_request;
         initial_state=explicit_initial,
     )
     @test default_result.lowered.builder isa LegacyTTNOBuilder
