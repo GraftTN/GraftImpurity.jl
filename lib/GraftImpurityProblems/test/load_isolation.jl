@@ -3,7 +3,7 @@
     script = raw"""
         using GraftImpurityProblems
         banned = Set([
-            "GraftImpurityBathFit", "GreenFunc", "GraftImpuritySolver",
+            "GraftImpurityBathFit", "GreenFunc", "GraftTTNSSolver",
             "GraftTTNOBuild", "GraftStateDiagram", "GraftGroundState",
             "GraftEvolution", "GraftThermal", "GraftImpurityCI",
         ])

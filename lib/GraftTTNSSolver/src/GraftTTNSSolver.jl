@@ -1,4 +1,4 @@
-module GraftImpuritySolver
+module GraftTTNSSolver
 
 import LinearAlgebra
 using LinearAlgebra: I
@@ -65,4 +65,4 @@ include("types.jl")
 include("requests.jl")
 include("orchestration.jl")
 
-end # module GraftImpuritySolver
+end # module GraftTTNSSolver

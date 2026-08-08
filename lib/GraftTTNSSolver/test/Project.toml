@@ -9,7 +9,7 @@ GraftImpurityFoundations = "3c703997-107e-47af-a3a4-2068413d67cf"
 GraftImpurityInteractions = "ff38f452-5450-47a1-bb7b-3484d76418db"
 GraftImpurityProblems = "72127451-eddd-47b0-aca9-ed50881d020e"
 GraftImpurityPoleFits = "bc763d54-c6dc-4f25-bb71-83535c88eea5"
-GraftImpuritySolver = "671ba014-2ccc-4013-b4e5-eebb41b7846b"
+GraftTTNSSolver = "671ba014-2ccc-4013-b4e5-eebb41b7846b"
 GraftNetworks = "9722b9cb-9502-4464-b3ad-04909505de0f"
 GraftSpectral = "820719f9-8ca8-4bd9-8c80-731fd33f18ce"
 GraftStateDiagram = "13d62100-4025-43ba-bfff-5935242a45be"
@@ -33,7 +33,7 @@ GraftImpurityFoundations = {path = "../../GraftImpurityFoundations"}
 GraftImpurityInteractions = {path = "../../GraftImpurityInteractions"}
 GraftImpurityProblems = {path = "../../GraftImpurityProblems"}
 GraftImpurityPoleFits = {path = "../../GraftImpurityPoleFits"}
-GraftImpuritySolver = {path = ".."}
+GraftTTNSSolver = {path = ".."}
 GraftNetworks = {path = "../../../../Graft.jl/lib/GraftNetworks"}
 GraftSpectral = {path = "../../../../Graft.jl/lib/GraftSpectral"}
 GraftStateDiagram = {path = "../../../../Graft.jl/lib/GraftStateDiagram"}
@@ -54,7 +54,7 @@ GraftImpurityFoundations = "0.1.1"
 GraftImpurityInteractions = "0.1.1"
 GraftImpurityProblems = "0.1.1"
 GraftImpurityPoleFits = "0.1.1"
-GraftImpuritySolver = "0.1.1"
+GraftTTNSSolver = "0.1.1"
 GraftNetworks = "0.1.1"
 GraftSpectral = "0.1.1"
 GraftStateDiagram = "0.1.1"

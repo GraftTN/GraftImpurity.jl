@@ -6,7 +6,7 @@ using GraftImpurityFoundations
 using GraftImpurityInteractions
 using GraftImpurityPoleFits
 using GraftImpurityProblems
-using GraftImpuritySolver
+using GraftTTNSSolver
 using GraftImpurityValidation
 using GraftStateDiagram
 using GraftTTNOBuild
@@ -19,7 +19,7 @@ const _UMBRELLA_OWNERS = (
     GraftImpurityProblems,
     GraftImpurityPoleFits,
     GraftImpurityBathFit,
-    GraftImpuritySolver,
+    GraftTTNSSolver,
     GraftImpurityValidation,
 )
 
@@ -94,12 +94,12 @@ end
         :PreparedImpurityProblem => GraftImpurityBathFit,
         :NonMountableImpurityPreparation => GraftImpurityBathFit,
         :prepare_impurity_problem => GraftImpurityBathFit,
-        :TTNSSolver => GraftImpuritySolver,
-        :TTNSWorkspace => GraftImpuritySolver,
-        :TTNSSolveRequest => GraftImpuritySolver,
-        :TTNSSolveResult => GraftImpuritySolver,
-        :TTNSScanResult => GraftImpuritySolver,
-        :TTNSCapabilityError => GraftImpuritySolver,
+        :TTNSSolver => GraftTTNSSolver,
+        :TTNSWorkspace => GraftTTNSSolver,
+        :TTNSSolveRequest => GraftTTNSSolver,
+        :TTNSSolveResult => GraftTTNSSolver,
+        :TTNSScanResult => GraftTTNSSolver,
+        :TTNSCapabilityError => GraftTTNSSolver,
     )
     for (name, owner) in expected_bindings
         @test name in names(GraftImpurity)
@@ -124,8 +124,8 @@ end
 end
 
 @testset "direct TTNO owners" begin
-    @test GraftImpuritySolver.ttno_from_opsum === GraftTTNOBuild.ttno_from_opsum
-    @test GraftImpuritySolver.compile_ttno === GraftStateDiagram.compile_ttno
+    @test GraftTTNSSolver.ttno_from_opsum === GraftTTNOBuild.ttno_from_opsum
+    @test GraftTTNSSolver.compile_ttno === GraftStateDiagram.compile_ttno
 end
 
 @testset "private concrete serialization aliases" begin

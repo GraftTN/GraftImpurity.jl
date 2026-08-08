@@ -22,6 +22,6 @@ end
         "GraftImpurityBaths",
         "GraftImpurityPoleFits",
         "GraftImpurityBathFit",
-        "GraftImpuritySolver",
+        "GraftTTNSSolver",
     ])))
 end

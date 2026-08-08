@@ -11,7 +11,7 @@ using GraftImpurityInteractions
 using GraftImpurityBaths
 using GraftImpurityBathFit
 using GraftImpurityProblems
-using GraftImpuritySolver
+using GraftTTNSSolver
 using GreenFunc
 using GraftTestUtils: categorical_coordinates, product_ttns, to_dense
 

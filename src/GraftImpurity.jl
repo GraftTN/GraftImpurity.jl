@@ -24,7 +24,7 @@ using GraftImpurityBaths
 using GraftImpurityProblems
 using GraftImpurityPoleFits
 using GraftImpurityBathFit
-using GraftImpuritySolver
+using GraftTTNSSolver
 using GraftImpurityValidation
 
 # Preserve concrete private bindings embedded in pre-split serialized public

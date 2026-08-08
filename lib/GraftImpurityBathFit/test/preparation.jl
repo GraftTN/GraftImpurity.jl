@@ -354,5 +354,5 @@ end
     @test !(nonmountable isa AbstractImpuritySolveResult)
 
     loaded = Set(pkgid.name for pkgid in keys(Base.loaded_modules))
-    @test "GraftImpuritySolver" ∉ loaded
+    @test "GraftTTNSSolver" ∉ loaded
 end

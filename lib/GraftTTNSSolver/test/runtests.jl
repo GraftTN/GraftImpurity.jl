@@ -1,6 +1,6 @@
 using Test
 
-@testset "GraftImpuritySolver" begin
+@testset "GraftTTNSSolver" begin
     include("onebody_symmetry.jl")
     include("interactions_lowering.jl")
     include("interaction_ttno.jl")

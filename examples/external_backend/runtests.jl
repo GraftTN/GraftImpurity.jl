@@ -77,7 +77,7 @@ end
 
     loaded = Set(pkgid.name for pkgid in keys(Base.loaded_modules))
     @test "GraftImpurity" ∉ loaded
-    @test "GraftImpuritySolver" ∉ loaded
+    @test "GraftTTNSSolver" ∉ loaded
     @test "GraftGroundState" ∉ loaded
     @test "GraftEvolution" ∉ loaded
     @test "GraftThermal" ∉ loaded

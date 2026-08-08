@@ -4,7 +4,7 @@ using GraftTTNOBuild
 using GraftImpurityFoundations
 using GraftImpurityInteractions
 using GraftImpurityBaths
-using GraftImpuritySolver
+using GraftTTNSSolver
 using GraftTestUtils: to_dense
 using LinearAlgebra: Hermitian, eigvals
 

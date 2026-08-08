@@ -3,7 +3,7 @@ using GraftFoundation
 using GraftImpurityFoundations
 using GraftImpurityInteractions
 using GraftImpurityBaths
-using GraftImpuritySolver
+using GraftTTNSSolver
 
 @testset "M6 one-body symmetry audit" begin
     layout = FlavorLayout(

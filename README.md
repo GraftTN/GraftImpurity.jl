@@ -28,7 +28,7 @@ GraftImpurityBathFit --prepare_impurity_problem--> ImpurityProblem
                                                            |
                                       +--------------------+------------------+
                                       |                                       |
-                               GraftImpuritySolver                       external backend
+                                  GraftTTNSSolver                        external backend
                                TTNSSolver policy                         solver policy
                                TTNSWorkspace                             backend workspace
 ```
@@ -51,7 +51,7 @@ action-bound response target; the TTNS backend certifies it against the full
 operator flux, while an unknown backend/action combination reaches a generic
 fail-closed extension hook. The common problem and manifold containers remain
 category-parametric, so a future CI or non-Abelian backend can extend the
-action protocol without depending on `GraftImpuritySolver`. Fusion routes,
+action protocol without depending on `GraftTTNSSolver`. Fusion routes,
 multiplicities, duality/braiding data, local tensor carriers, and compiler
 channels remain responsibilities of Graft core and the concrete backend; they
 are not inferred or stored in the common impurity problem.

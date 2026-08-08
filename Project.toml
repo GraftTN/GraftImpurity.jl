@@ -11,7 +11,7 @@ GraftImpurityFoundations = "3c703997-107e-47af-a3a4-2068413d67cf"
 GraftImpurityInteractions = "ff38f452-5450-47a1-bb7b-3484d76418db"
 GraftImpurityPoleFits = "bc763d54-c6dc-4f25-bb71-83535c88eea5"
 GraftImpurityProblems = "72127451-eddd-47b0-aca9-ed50881d020e"
-GraftImpuritySolver = "671ba014-2ccc-4013-b4e5-eebb41b7846b"
+GraftTTNSSolver = "671ba014-2ccc-4013-b4e5-eebb41b7846b"
 GraftImpurityValidation = "c9b6821c-9786-4062-96a1-3ad33b52b59d"
 PrecompileTools = "aea7be01-6a6a-4083-8856-8a6e6704d82a"
 
@@ -22,7 +22,7 @@ GraftImpurityFoundations = {path = "lib/GraftImpurityFoundations"}
 GraftImpurityInteractions = {path = "lib/GraftImpurityInteractions"}
 GraftImpurityPoleFits = {path = "lib/GraftImpurityPoleFits"}
 GraftImpurityProblems = {path = "lib/GraftImpurityProblems"}
-GraftImpuritySolver = {path = "lib/GraftImpuritySolver"}
+GraftTTNSSolver = {path = "lib/GraftTTNSSolver"}
 GraftImpurityValidation = {path = "lib/GraftImpurityValidation"}
 
 [compat]
@@ -32,7 +32,7 @@ GraftImpurityFoundations = "0.1.1"
 GraftImpurityInteractions = "0.1.1"
 GraftImpurityPoleFits = "0.1.1"
 GraftImpurityProblems = "0.1.1"
-GraftImpuritySolver = "0.1.1"
+GraftTTNSSolver = "0.1.1"
 GraftImpurityValidation = "0.1.1"
 PrecompileTools = "1.3.4"
 julia = "1.11"

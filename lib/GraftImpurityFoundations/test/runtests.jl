@@ -103,7 +103,7 @@ end
     @test workspace.result === result
 
     loaded = Set(pkgid.name for pkgid in keys(Base.loaded_modules))
-    @test "GraftImpuritySolver" ∉ loaded
+    @test "GraftTTNSSolver" ∉ loaded
 end
 
 @testset "generic identity and local fermions" begin

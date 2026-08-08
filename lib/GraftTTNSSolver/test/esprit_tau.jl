@@ -5,7 +5,7 @@ using GraftImpurityFoundations
 using GraftImpurityInteractions
 using GraftImpurityBaths
 using GraftImpurityBathFit
-using GraftImpuritySolver
+using GraftTTNSSolver
 import GreenFunc
 import GraftSpectral
 

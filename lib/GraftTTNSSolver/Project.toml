@@ -1,4 +1,4 @@
-name = "GraftImpuritySolver"
+name = "GraftTTNSSolver"
 uuid = "671ba014-2ccc-4013-b4e5-eebb41b7846b"
 authors = ["weiyiguo9"]
 license = "Apache-2.0"

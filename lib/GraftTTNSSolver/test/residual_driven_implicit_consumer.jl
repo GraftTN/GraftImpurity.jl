@@ -7,7 +7,7 @@ using GraftImpurityFoundations
 using GraftImpurityInteractions
 using GraftImpurityBaths
 using GraftImpurityProblems
-using GraftImpuritySolver
+using GraftTTNSSolver
 
 function _residual_driven_consumer_fixture()
     layout = FlavorLayout(
@@ -60,7 +60,7 @@ end
     beta = 0.2
     taus = [0.0, beta]
     imaginary_time = ImaginaryTimeRequest(
-        taus, GraftImpuritySolver.FiniteTemperature(beta);
+        taus, GraftTTNSSolver.FiniteTemperature(beta);
         evolver,
         thermal_nsteps=1,
         propagation_nsteps=1)
@@ -68,7 +68,7 @@ end
     @test imaginary_time.evolver === evolver
     @test imaginary_time.evolver.expansion === expansion
 
-    result = GraftImpuritySolver._solver_imaginary_time(
+    result = GraftTTNSSolver._solver_imaginary_time(
         fixture.lowered, imaginary_time, (fixture.channel,))
     raw = result.correlators.particle
     standard_gtau = CorrelatorSeries(

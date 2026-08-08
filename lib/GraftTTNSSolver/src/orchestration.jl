@@ -140,7 +140,7 @@ function _solver_warm_identity(problem_identity::UInt, policy_identity::UInt,
                                manifold_identity::UInt, request_identity::UInt,
                                mounted::AbstractMountedBath)
     bath_hash = _mounted_bath_integrity_hash(mounted)
-    return hash((:GraftImpuritySolverWarmStart, problem_identity, policy_identity,
+    return hash((:GraftTTNSSolverWarmStart, problem_identity, policy_identity,
                  manifold_identity, request_identity,
                  mounted.topology, mounted.diagnostics.ownership_hash, bath_hash,
                  ))

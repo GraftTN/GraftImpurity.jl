@@ -7,7 +7,7 @@ using GraftTTNOBuild
 using GraftImpurityFoundations
 using GraftImpurityInteractions
 using GraftImpurityBaths
-using GraftImpuritySolver
+using GraftTTNSSolver
 using GraftTestUtils: dense_hamiltonian, to_dense, product_ttns
 using LinearAlgebra: diag, norm, Hermitian, eigvals
 
@@ -226,7 +226,7 @@ end
     )
         certificate_bath, certificate_mounted = certified_mount()
         mutate!(certificate_bath)
-        @test_throws ArgumentError GraftImpuritySolver._require_mounted_hamiltonian_integrity(
+        @test_throws ArgumentError GraftTTNSSolver._require_mounted_hamiltonian_integrity(
             certificate_mounted,
         )
     end

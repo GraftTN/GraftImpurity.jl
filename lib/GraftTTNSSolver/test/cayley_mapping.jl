@@ -8,7 +8,7 @@ using GraftTTNOBuild
 using GraftImpurityFoundations
 using GraftImpurityInteractions
 using GraftImpurityBaths
-using GraftImpuritySolver
+using GraftTTNSSolver
 using GraftTestUtils: categorical_coordinates, random_ttns, to_dense
 
 function _cayley_delta(coupling::AbstractMatrix{<:Number},

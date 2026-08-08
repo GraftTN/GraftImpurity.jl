@@ -7,7 +7,7 @@ using GraftImpurityFoundations
 using GraftImpurityInteractions
 using GraftImpurityBaths
 using GraftImpurityProblems
-using GraftImpuritySolver
+using GraftTTNSSolver
 using GraftTestUtils: product_ttns, to_dense
 using LinearAlgebra: dot, exp
 
@@ -63,7 +63,7 @@ function _solver_initial_state(problem::ImpurityProblem, solver::TTNSSolver;
                                occupied_site::Union{Nothing,Symbol}=nothing,
                                T::Type{<:Number}=ComplexF64)
     workspace = TTNSWorkspace()
-    mounted = GraftImpuritySolver._solver_mount_bath!(
+    mounted = GraftTTNSSolver._solver_mount_bath!(
         workspace, solver, problem.bath,
     )
     names = propertynames(mounted.phys)
@@ -559,7 +559,7 @@ end
         ComplexTimeSegment(-0.02 - 0.05im, 1; label=:tilted);
         evolver=DirectKrylovBootstrap(krylovdim=4, max_basis=4),
     )
-    raw = GraftImpuritySolver._solver_complex_time(
+    raw = GraftTTNSSolver._solver_complex_time(
         result.ground_state.state, result.energy, result.lowered,
         tilted, (correlator,),
     )
@@ -622,7 +622,7 @@ end
             trunc=TruncationScheme(maxdim=4), nsweeps=1, krylovdim=4,
         ),
         imaginary_time=ImaginaryTimeRequest(
-            [0.0, 0.5], GraftImpuritySolver.FiniteTemperature(1.0);
+            [0.0, 0.5], GraftTTNSSolver.FiniteTemperature(1.0);
             evolver=TDVP1(krylovdim=4, verbose=false),
             thermal_nsteps=1, propagation_nsteps=1,
         ),
